@@ -55,7 +55,7 @@ copy .env.example .env
 | `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | DB. 내부에서 `mysql+pymysql://…` 조립 |
 | `DATABASE_URL` | (선택) 있으면 DB_*보다 우선 |
 | `CORS_ORIGINS` | FE 주소. 로컬 기본 예: `http://localhost:3000` |
-| `TMAP_APP_KEY` | **서버 전용** ETA/길찾기 (목록 거리 계산용 아님) |
+| `TMAP_APP_KEY` | **서버 전용** POI/장소검색·ETA/길찾기 (목록 거리 계산용 아님) |
 | `DATA_GO_KR_KEY` | 수집·연동 시 |
 | `JWT_SECRET` / `KAKAO_CLIENT_*` 등 | Auth 구현 시 (example 주석 참고) |
 
@@ -82,7 +82,7 @@ npm run dev
 | 키 | 용도 |
 |---|---|
 | `NEXT_PUBLIC_API_BASE_URL` | BE base (로컬 예: `http://localhost:8000`, trailing slash 없이) |
-| `NEXT_PUBLIC_TMAP_APP_KEY` | **지도 SDK 전용** (브라우저 노출). BE `TMAP_APP_KEY`와 **이름·용도 분리** |
+| `NEXT_PUBLIC_TMAP_MAP_KEY` | **지도 SDK 전용** (브라우저 노출). BE `TMAP_APP_KEY`(POI/ETA REST)와 **이름·용도 분리** |
 
 DB 비밀번호·서버 REST 키를 FE env에 넣지 않는다.
 
@@ -138,11 +138,11 @@ API 문서: `http://localhost:8000/docs`
 | 구분 | 내용 |
 |---|---|
 | 진행 단계 | 스켈레톤 구축 · DB/외부 연동 전 |
-| FE | `/map`·로그인/가입 UI, TMAP 실연동 전, stations 클라이언트 뼈대 |
-| BE | FastAPI 뼈대, stations/auth 시그니처·TODO |
-| 문서 | README 공개용, stations/auth 계약, rules, 본 온보딩 섹션 |
+| FE | `/map`·로그인/가입 UI, `locationStore` follow/현위치, places 검색→BE 연동 |
+| BE | FastAPI 뼈대, stations/auth, **places TMAP POI 프록시** (`GET /api/v1/places/search`) |
+| 문서 | README 공개용, stations/auth 계약, rules, TMAP env=`NEXT_PUBLIC_TMAP_MAP_KEY`/`TMAP_APP_KEY` 확정 |
 | Git | `web/`·`api/` 별도 리포. 상위는 git 없음 |
-| 다음 | stations DB → TMAP SDK → OAuth/세션 실구현 → 포인트 |
+| 다음 | stations DB → 검색 UX 확인 → OAuth/세션 → 위치 watch → 포인트 |
 
 기준 합의: 워크스페이스 `docs/프로젝트_현황_및_합의사항_20260723.md` (변수명·코드 의미 변경 금지)
 
@@ -199,6 +199,93 @@ API 문서: `http://localhost:8000/docs`
 
 ### 한 일
 - 본 문서 상단에 팀원용 **세팅 순서·실행 명령·포트·env 키 이름·트러블슈팅·Git 규칙** 추가 (실값 없음).
+
+---
+
+## 2026-07-24 — locationStore 뼈대 (공유 현위치)
+
+### 한 일
+- FE: `types/location.ts`, `stores/locationStore.ts` 추가 (`coords` / `source` / `follow` / `testMode` / `locateOnce`·`startWatch` stub).
+- `mapStore`에서 `userLocation` 제거 — 지도 카메라(`center`)와 사용자 위치 분리.
+- `AppShell`·`MapView`가 `locationStore` 소비 (반경 API origin·마커·현위치 버튼 follow).
+
+### 결정
+- 현위치는 여러 컨슈머(지도·반경검색·거리·추후 네비)가 쓰므로 전용 zustand store.
+- 테스트 모드는 별도 페이지가 아니라 같은 store + `testMode`/`setTestCoords`.
+
+### 다음
+- `startWatch` 실구현, 지도 클릭 테스트 입력, TMAP 마커로 coords 투영, `FEATURES.moveToMyLocation` 연동.
+
+---
+
+## 2026-07-24 — 현위치 버튼 1회만 이동 버그 정리
+
+### 한 일
+- `locationStore`: `locateOnce`를 실제 Promise로 수정, `requestFollow` + `followEpoch` 추가 (같은 좌표라도 재이동).
+- `MapView`: 카메라 경로 단일화 — follow→`mapStore.center`→TMAP `setCenter`. 버튼에서 직접 `map.setCenter` 제거.
+- `MapSearchBar` 장소 선택 시 `follow` 해제.
+
+### 결정
+- 현위치 탭마다 `followEpoch`를 올려 이펙트가 다시 돌게 함. GPS는 버튼마다 `locateOnce`로 갱신.
+
+### 다음
+- `FEATURES.moveToMyLocation` true 후 실기기/브라우저에서 반복 탭 확인. TMAP 마커로 coords 투영.
+
+---
+
+## 2026-07-24 — 현위치 거부 먹통·1회 이동 재수정
+
+### 한 일
+- AppShell `locateOnce` rejection catch (위치 OFF 시 unhandled rejection 오버레이 방지).
+- 현위치: 캐시 좌표로 즉시 `map.setCenter` 후 GPS 갱신 (이펙트 의존 제거).
+- 권한 거부 메시지·버튼 옆 에러 표시. `FEATURES.moveToMyLocation` true.
+
+### 결정
+- 카메라 이동은 버튼에서 imperative. drag/현위치 후에는 center sync 스킵.
+
+### 다음
+- 위치 OFF·허용·지도 팬 후 ◎ 반복 탭 확인.
+
+---
+
+## 2026-07-24 — 현위치 TMAP Marker 연결
+
+### 한 일
+- `MapView`: 화면 중앙 파란점 overlay 제거. `locationStore.coords` → `Tmapv2.Marker` create/setPosition.
+
+### 다음
+- 커스텀 아이콘·accuracy 원·`startWatch` 연동(선택).
+
+---
+
+## 2026-07-24 — TMAP env 이름 확정
+
+### 한 일
+- FE 지도 SDK 키: `NEXT_PUBLIC_TMAP_APP_KEY`(가칭) → **`NEXT_PUBLIC_TMAP_MAP_KEY`** 로 개명.
+- `web/.env.example`·README, `api/.env.example`·README, `docs/rules/02`, 합의 문서 §3.1/§10/TBD 반영.
+- BE `TMAP_APP_KEY` 용도 주석에 POI/장소검색 포함 (ETA·길찾기와 동일 서버 키).
+
+### 결정
+- 지도 SDK = FE 공개 키. POI/검색·ETA REST = BE만. 장소검색은 Next BFF 아님 → FastAPI 프록시.
+- BE 담당 확인 후 문서·example 선반영 (엔드포인트 구현은 후속).
+
+### 다음
+- `MapView`에서 `NEXT_PUBLIC_TMAP_MAP_KEY` 실제 로드.
+- BE 장소검색 프록시 시그니처·`searchTmapPlaces()` → 우리 API 호출.
+
+---
+
+## 2026-07-24 — places 검색 최소 연동
+
+### 한 일
+- BE `places`: import 경로 수정(`services_tmap`), `PlaceResult` 응답, `get_settings().tmap_app_key`로 TMAP POI 호출.
+- 빈 `tmap.py` 제거. FE `searchTmapPlaces` → `GET /api/v1/places/search`.
+
+### 결정
+- 기존 `router` / `client` / `services_tmap` / `place` 파일명 유지(최소 수정).
+
+### 다음
+- 지도에서 검색 결과 선택 → 이동 UX 확인. 키 없으면 503.
 
 ---
 

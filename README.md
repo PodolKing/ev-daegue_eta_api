@@ -43,7 +43,7 @@
 | ORM | SQLAlchemy 2 |
 | DB | MariaDB / MySQL |
 | Validation | Pydantic v2 (`CamelModel`) |
-| Maps (server) | TMAP REST (`TMAP_APP_KEY`) — ETA/routing |
+| Maps (server) | TMAP REST (`TMAP_APP_KEY`) — POI/search, ETA/routing |
 
 ## Quick start
 
@@ -68,7 +68,7 @@ copy .env.example .env
 |---|---|
 | `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | Assembled into SQLAlchemy URL |
 | `DATABASE_URL` | Optional override |
-| `TMAP_APP_KEY` | Server-only routing/ETA |
+| `TMAP_APP_KEY` | Server-only POI/place search, routing/ETA |
 | `CORS_ORIGINS` | Allowed FE origins |
 | `DATA_GO_KR_KEY` | External data / collection (as needed) |
 
@@ -104,4 +104,3 @@ docs/
 
 ## License / notice
 
-팀 프로젝트·학습용 초안입니다. 상용 PG 정산·멀티 소셜·ML 예측은 범위 밖이며, 포인트는 테스트 충전(A안) 또는 PG 테스트(B안)로 데모합니다.
