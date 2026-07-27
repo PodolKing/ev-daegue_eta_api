@@ -6,8 +6,8 @@
 |---|---|---|---|---|
 | `lat` | number | required | — | Current latitude |
 | `lng` | number | required | — | Current longitude |
-| `radiusKm` | number | `3` | `10` | Straight-line radius (km). UI: **1 / 3 / 5** |
-| `limit` | int | `50` | `200` | Max stations. FE: **1→50 / 3→100 / 5→200** |
+| `radiusKm` | number | `3` | `10` | Straight-line radius (km). UI: **1 / 2 / 3** |
+| `limit` | int | `50` | `200` | Max stations. FE: **1→50 / 2→100 / 3→200** |
 
 Distance is **DB Haversine** (bbox → filter → sort). Not TMAP route distance.
 
