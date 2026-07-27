@@ -233,21 +233,21 @@ PC 전용으로 되돌릴 때:
 
 - API 응답 **camelCase**, `availableCount` **null ≠ 0**
 - 지도 **TMAP**, 마커 좌표는 **BE(DB)**, 목록 거리 **Haversine(BE)**
-- 반경 기본 **3km** / limit **50** (UI **1·3·5** km)
+- 반경 UI **1·3·5 km** / limit **50·100·200** (FE `limitForRadiusKm`, BE `MAX_LIMIT` — 상세는 2026-07-27 limit 조정 위치 블록)
 - OAuth는 **리다이렉트만** (팝업 없음). 지도 상태 복원은 `returnUrl` 쿼리
 
 ---
 
-## 요약 (2026-07-24 기준)
+## 요약 (2026-07-27 기준)
 
 | 구분 | 내용 |
 |---|---|
-| 진행 단계 | 스켈레톤 구축 · DB/외부 연동 전 |
-| FE | `/map`·로그인/가입 UI, `locationStore` follow/현위치, places 검색→BE 연동 |
-| BE | FastAPI 뼈대, stations/auth, **places TMAP POI 프록시** (`GET /api/v1/places/search`) |
-| 문서 | README 공개용, stations/auth 계약, rules, TMAP env=`NEXT_PUBLIC_TMAP_MAP_KEY`/`TMAP_APP_KEY` 확정 |
+| 진행 단계 | 지도 **동결** · 모바일 검색 토글 · 위치 안내 |
+| FE | `/map` 정상. SDK=`loadSdk` **topopentile 우선**. 검색 아이콘 토글. 반경 fitBounds=사용자 탭만 |
+| BE | FastAPI 뼈대, stations/auth, places TMAP POI 프록시 |
+| 문서 | **`docs/important.md` 필독(잠금)**. rules, MAP_KEY/APP_KEY 분리 |
 | Git | `web/`·`api/` 별도 리포. 상위는 git 없음 |
-| 다음 | stations DB → 검색 UX 확인 → OAuth/세션 → 위치 watch → 포인트 |
+| 다음 | stations 좌표 마커 → OAuth/세션 → 위치 watch → 포인트 (**지도 SDK는 잠금**) |
 
 기준 합의: 워크스페이스 `docs/프로젝트_현황_및_합의사항_20260723.md` (변수명·코드 의미 변경 금지)
 
@@ -494,6 +494,228 @@ PC 전용으로 되돌릴 때:
 
 ### 다음
 - Ultra/Fold 실기기에서 메뉴 기본 닫힘·「메뉴」토글 확인.
+
+---
+
+## 2026-07-27 — 모바일 지도 미표시·버튼 먹통 수정
+
+### 한 일
+- `MapView`: TMAP SDK를 `apis.openapi.sk.com/tmap/jsv2?appKey=` + `NEXT_PUBLIC_TMAP_MAP_KEY`로 로드 (키 없는 topopentile 스크립트 제거).
+- 좌표 없는 임시 station 버튼 overlay·중앙 파란점 제거 (지도·FAB 터치 차단 원인).
+- 모바일 하단 시트·현위치/반경/메뉴를 `42dvh` 기준으로 맞추고 FAB/메뉴 z-index 상향. 시트 바깥은 `pointer-events-none`.
+
+### 결정
+- 충전소 지도 표시는 이후 좌표 기반 TMAP Marker로만. 임시 HTML 버튼 오버레이 금지.
+
+### 다음
+- 폰에서 하드 새로고침 후 타일·◎·반경·메뉴 토글 확인. TMAP 콘솔에 LAN Origin 허용.
+
+---
+
+## 2026-07-27 — TMAP z-index 가림 + 메뉴 위치
+
+### 한 일
+- `MapView`: 지도 컨테이너를 `z-0` 트랩으로 감싸 SDK 내부 z-index가 FAB/검색을 덮지 않게 함. UI는 `pointer-events` 분리 레이어.
+- 모바일「메뉴」버튼을 하단→**상단 우측**(검색 옆)으로 이동해 시트/상세와 겹침 제거.
+
+### 다음
+- FE 재시작(`NEXT_PUBLIC_*`) + 폰 하드 새로고침 후 재확인. 폰은 `npm run dev:lan` 권장.
+
+---
+
+## 2026-07-27 — TMAP LatLng 미준비 + allowedDevOrigins
+
+### 한 일
+- `MapView`: `LatLng`/`Map`이 constructor일 때만 create (부분 로드 크래시 방지), 폴링 재시도.
+- `next.config.ts`: `allowedDevOrigins`에 LAN IP (`172.30.1.7` 등) — 폰에서 Next 폰트/HMR 차단 해제.
+
+### 다음
+- **FE 서버 재시작** 필수(`next.config` 반영). 폰 강력 새로고침.
+
+---
+
+## 2026-07-27 — 모바일 검색 토글 + 위치 안내 문구
+
+### 한 일
+- `MapSearchBar`: compact에서 검색 **아이콘 ↔ 기존 필 검색바** 토글 (바텀시트 아님). 데스크톱은 항상 검색바.
+- `MapView`: 위치 실패 안내를 FAB 위 **닫기 가능한 배너**로 표시.
+- `locationStore`: insecure context(LAN HTTP)면 geolocation 전에 안내. 권한 거부 문구 명확화.
+
+### 결정
+- 검색 토글 기준은 메뉴와 동일 (`useCompactLayout`).
+- HTTPS/localhost 위치 제한은 **브라우저 Geolocation(secure context) 정책** — TMAP 무관.
+
+### 다음
+- (지도 로드 이슈는 아래 블록)
+
+---
+
+## 2026-07-27 — 지도 안 뜸 (SDK Strict Mode 로드 레이스)
+
+### 한 일
+- `lib/tmap/loadSdk.ts` 추가: jsv2를 **페이지당 1회** 로드하는 싱글톤 (실패 시 재시도, Strict remount 안전).
+- `MapView`: 폴링/`onload=null` 제거 → `ensureTmapSdk()` 후 `Map("ev-tmap-map")` 생성. 오류 메시지에 `Tmapv2`/`Map`/`LatLng` 진단 포함.
+
+### 결정
+- “SDK 준비 안 됨”은 스크립트 실패·키/도메인 거부·로드 레이스가 타임아웃으로 뭉개진 경우가 많음. 진단 문구로 구분.
+
+### 다음
+- 강력 새로고침 후 상단 빨간 문구 **전체** 확인 (괄호 안 진단 포함).
+- 브라우저 DevTools → Network에서 `jsv2` 상태(200/403) 확인. TMAP 콘솔에 `localhost` 도메인 허용.
+
+---
+
+## 2026-07-27 — TMAP SDK 잠금 + Map/LatLng fallback
+
+### 한 일
+- `loadSdk.ts`: 공식 jsv2 후 `Map`/`LatLng` 없으면 **topopentile fallback**.
+- Cursor rule `tmap-sdk-lock.mdc` + `docs/rules/01_agent_permissions.md`: SDK 로드/MapView 부트스트랩은 **허락 없이 수정 금지**.
+
+### 결정
+- 시행착오 반복 방지. UI 작업 시 SDK 로더를 같이 건드리지 않음.
+- jsv2 우선, stub만 오면 topopentile.
+
+### 다음
+- `/map` 강력 새로고침으로 지도 표시 확인. 뜬 뒤 SDK 잠금 준수.
+
+---
+
+## 2026-07-27 — important.md (TMAP 잠금 정리)
+
+### 한 일
+- `docs/important.md` 작성: TMAP SDK 잠금 경로, 로드 순서(jsv2→topopentile), 키 분리, 시행착오 표, 변경 시 허락 절차.
+- `web/docs/`, `api/docs/` 동기화. rules README·tmap-sdk-lock·01_agent_permissions에서 링크.
+
+### 결정
+- 지도 정상 후 SDK/부트스트랩은 **수정 전 사용자에게 묻기**. Agent 규칙 + important 문서로 고정.
+
+### 다음
+- (없음)
+
+---
+
+## 2026-07-27 — TMAP jsv2 stub 빠른 fallback (사용자 허락)
+
+### 한 일
+- `loadSdk.ts`: jsv2 stub(`Tmapv2`만 있고 Map/LatLng 없음) ~350ms면 즉시 topopentile. jsv2 최대 대기 8s→~1.2s.
+- `docs/important.md` 로드 타이밍 문구 갱신.
+
+### 결정
+- 첫 지도 지연의 주원인은 stub 8초 대기. 공식 경로 유지하되 fail-fast.
+
+### 다음
+- 웹/폰에서 첫 로드 체감 확인.
+
+---
+
+## 2026-07-27 — 첫 로드 순서·웹 줌아웃 수정 (사용자 허락)
+
+### 한 일
+- `loadSdk`: **topopentile 우선** (jsv2 stub 왕복 제거).
+- `RadiusControl`: 첫 지도 붙을 때 `fitBounds` 금지 — 사용자가 반경 버튼 누를 때만.
+- `returnUrl` 파서: `zoom=0` / `lat=0` 무시. MapView resize 후 줌&lt;11이면 store 줌 복구.
+
+### 결정
+- 한반도 풀줌은 레이아웃 전 fitBounds 부작용. 초기 줌은 createMap(15) 유지.
+
+### 다음
+- 웹·모바일 강력 새로고침 후 대구 근처 줌·첫 타일 속도 확인.
+
+---
+
+## 2026-07-27 — 지도 동결 문서화 (수정 잠금)
+
+### 한 일
+- `docs/important.md` 전면 정리: 동결 상태표, 잠긴 경로(+`RadiusControl`), 로드·줌·fitBounds 스펙, 시행착오 표, 잠금 해제 절차.
+- `.cursor/rules/tmap-sdk-lock.mdc` FROZEN + RadiusControl 포함. `01_agent_permissions` / `project-overview` / rules README 갱신.
+- `web/docs`·`api/docs` 동기화.
+
+### 결정
+- **이제부터** 지도 SDK·부트스트랩·반경 fit은 **허락 없이 수정 금지.**
+
+### 다음
+- (없음 — 잠금 유지)
+
+---
+
+## 2026-07-27 — 반경 고정 줌 프리셋 (사용자 허락)
+
+### 한 일
+- `RadiusControl`: 반경 탭 시 `fitBounds` 제거 → 고정 줌 **1→16 / 3→15 / 5→14** + 중심 유지. 원 tint↑·stroke 얇게(잘림 허용).
+- `docs/important.md`·`tmap-sdk-lock.mdc` 스펙 갱신. `web/docs`·`api/docs` 동기화.
+
+### 결정
+- 원 전체 맞춤보다 “내 주변” 시야 유지. 프리셋은 체감 후 조정 가능.
+
+### 다음
+- 웹·폰에서 1/3/5 전환 시야·원 잘림 체감 확인. 필요 시 줌 숫자만 미세 조정.
+
+---
+
+## 2026-07-27 — stations DB 반경 조회 (ValidationError→CORS 오인)
+
+### 한 일
+- `stations/service.py`: bbox→Haversine→`stat_id` 집계→status LEFT JOIN→`availableCount` null≠0.
+- `controller`: NotImplemented 빈배열 제거. FE CORS 오류의 실원인은 500(필드명/`StationItem` 검증 실패).
+
+### 결정
+- `/stations`는 DB만 조회. 외부 status API는 요청 경로에 넣지 않음.
+
+### 다음
+- FE 마커. status 테이블 적재 확인(`availableCount` null이면 수집 파이프).
+
+---
+
+## 2026-07-27 — stations router/controller 역할 복구
+
+### 한 일
+- `router.py`에 controller 로직이 섞여 `ImportError: cannot import name 'router'` 발생 → FastAPI `APIRouter` 복구.
+- `controller.get_stations`를 near(`list_stations_near`)만 호출하도록 정리. 빈 `route_service.py` 제거.
+
+### 결정
+- 계약 유지: `GET /api/v1/stations?lat&lng&radiusKm&limit` (viewport mode 미도입).
+
+### 다음
+- uvicorn 기동·`/api/v1/stations` near 응답 확인.
+
+---
+
+## 2026-07-27 — stations 반경별 limit + FE 재조회 고정
+
+### 한 일
+- BE `MAX_LIMIT` 100→**150**, router `le=150`.
+- FE `limitForRadiusKm`: **1→50 / 3→100 / 5→150**. `AppShell`이 `radiusKm` 변경 시 재요청(요청 seq로 stale 응답 무시).
+- `stations_api.md` limit 상한·UI 반경 표기 갱신.
+
+### 결정
+- limit는 FE가 반경별로 넘김. BE는 상한만 150까지 허용.
+
+### 다음
+- 1/3/5 탭 시 Network에 `radius_km`·`limit` 변경 요청이 나가는지 확인.
+
+---
+
+## 2026-07-27 — stations limit 조정 위치 정리 + 5km 200건
+
+### 한 일
+- 5km limit **150→200**: FE `web/src/lib/api.ts` `limitForRadiusKm`, BE `service.MAX_LIMIT`, router `Query(le=MAX_LIMIT)`.
+- 아래 **limit/반경 상한이 어디서 정해지는지** 문서화.
+
+### 결정 — stations limit·반경 상한 (수정 시 같이 맞출 곳)
+
+| 역할 | 파일 | 내용 |
+|------|------|------|
+| **반경별 개수 (본체)** | `web/src/lib/api.ts` → `limitForRadiusKm` | UI 1/3/5 km → **50 / 100 / 200** |
+| **BE limit 상한** | `api/.../stations/service.py` → `MAX_LIMIT`, `clamp_limit()` | 요청 limit 최대값 |
+| **API 검증** | `api/.../stations/router.py` → `Query(..., le=MAX_LIMIT)` | FastAPI 422 방지 |
+| **기본값** | `service.DEFAULT_LIMIT`(50), `DEFAULT_RADIUS_KM`(3) | 쿼리 생략 시 |
+| **반경 상한** | `service.MAX_RADIUS_KM`(10), router `radius_km le=10` | UI는 1·3·5, API 직접 호출은 10까지 |
+| **전달만** | `controller.py` | 받은 `limit`을 `list_stations_near`에 전달 |
+
+5km 건수만 바꿀 때: **FE `limitForRadiusKm` + BE `MAX_LIMIT` ≥ 그 값 + router `le`**.
+
+### 다음
+- 5km 탭 시 `limit=200` 요청·응답 count 확인.
 
 ---
 

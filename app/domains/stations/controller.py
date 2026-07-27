@@ -12,16 +12,13 @@ def get_stations(
     radius_km: float,
     limit: int,
 ) -> StationListResponse:
+    """현위치 기준 반경(near) 충전소 조회."""
     radius = stations_service.clamp_radius_km(radius_km)
     lim = stations_service.clamp_limit(limit)
 
-    # TODO: wire real service when DB is available
-    try:
-        rows = stations_service.list_stations_near(
-            db, lat=lat, lng=lng, radius_km=radius, limit=lim
-        )
-    except NotImplementedError:
-        rows = []
+    rows = stations_service.list_stations_near(
+        db, lat=lat, lng=lng, radius_km=radius, limit=lim
+    )
 
     items = [StationItem.model_validate(row) for row in rows]
     return StationListResponse(

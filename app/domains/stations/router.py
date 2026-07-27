@@ -4,7 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, is_db_configured
 from app.domains.stations import controller as stations_controller
 from app.domains.stations.schema import StationListResponse
-from app.domains.stations.service import DEFAULT_LIMIT, DEFAULT_RADIUS_KM, clamp_limit, clamp_radius_km
+from app.domains.stations.service import (
+    DEFAULT_LIMIT,
+    DEFAULT_RADIUS_KM,
+    MAX_LIMIT,
+    clamp_limit,
+    clamp_radius_km,
+)
 
 router = APIRouter(prefix="/api/v1/stations", tags=["stations"])
 
@@ -14,7 +20,7 @@ def list_stations(
     lat: float = Query(..., description="Current latitude"),
     lng: float = Query(..., description="Current longitude"),
     radius_km: float = Query(DEFAULT_RADIUS_KM, ge=0.1, le=10),
-    limit: int = Query(DEFAULT_LIMIT, ge=1, le=100),
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     db: Session | None = Depends(get_db),
 ) -> StationListResponse:
     """Nearby stations by straight-line distance (DB Haversine, not TMAP)."""
