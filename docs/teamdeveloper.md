@@ -233,7 +233,7 @@ PC 전용으로 되돌릴 때:
 
 - API 응답 **camelCase**, `availableCount` **null ≠ 0**
 - 지도 **TMAP**, 마커 좌표는 **BE(DB)**, 목록 거리 **Haversine(BE)**
-- 반경 UI **1·3·5 km** / limit **50·100·200** (FE `limitForRadiusKm`, BE `MAX_LIMIT` — 상세는 2026-07-27 limit 조정 위치 블록)
+- 반경 UI **1·2·3 km** / limit **50·100·200** (FE `limitForRadiusKm`, BE `MAX_LIMIT` — 상세는 2026-07-27 limit 조정 위치 블록)
 - OAuth는 **리다이렉트만** (팝업 없음). 지도 상태 복원은 `returnUrl` 쿼리
 
 ---
@@ -705,17 +705,31 @@ PC 전용으로 되돌릴 때:
 
 | 역할 | 파일 | 내용 |
 |------|------|------|
-| **반경별 개수 (본체)** | `web/src/lib/api.ts` → `limitForRadiusKm` | UI 1/3/5 km → **50 / 100 / 200** |
+| **반경별 개수 (본체)** | `web/src/lib/api.ts` → `limitForRadiusKm` | UI 1/2/3 km → **50 / 100 / 200** |
 | **BE limit 상한** | `api/.../stations/service.py` → `MAX_LIMIT`, `clamp_limit()` | 요청 limit 최대값 |
 | **API 검증** | `api/.../stations/router.py` → `Query(..., le=MAX_LIMIT)` | FastAPI 422 방지 |
 | **기본값** | `service.DEFAULT_LIMIT`(50), `DEFAULT_RADIUS_KM`(3) | 쿼리 생략 시 |
-| **반경 상한** | `service.MAX_RADIUS_KM`(10), router `radius_km le=10` | UI는 1·3·5, API 직접 호출은 10까지 |
+| **반경 상한** | `service.MAX_RADIUS_KM`(10), router `radius_km le=10` | UI는 1·2·3, API 직접 호출은 10까지 |
 | **전달만** | `controller.py` | 받은 `limit`을 `list_stations_near`에 전달 |
 
-5km 건수만 바꿀 때: **FE `limitForRadiusKm` + BE `MAX_LIMIT` ≥ 그 값 + router `le`**.
+3km 건수만 바꿀 때: **FE `limitForRadiusKm` + BE `MAX_LIMIT` ≥ 그 값 + router `le`**.
 
 ### 다음
-- 5km 탭 시 `limit=200` 요청·응답 count 확인.
+- 3km 탭 시 `limit=200` 요청·응답 count 확인.
+
+---
+
+## 2026-07-27 — 반경 UI 1/2/3 km + 줌·limit 재정렬
+
+### 한 일
+- UI 반경 **1·3·5 → 1·2·3 km**. 고정 줌 **1→16 / 2→15 / 3→14** (`RadiusControl`, 사용자 승인 후 동결 스펙 갱신).
+- limit **1→50 / 2→100 / 3→200** (`limitForRadiusKm`). `RadiusKm`·`returnUrl`·README·`important.md`·`stations_api` 동기화.
+
+### 결정
+- 반경 탭은 가까운 체감 유지. 원 잘림 허용·`fitBounds` 금지 원칙은 유지.
+
+### 다음
+- 1/2/3 탭 시 Network `radius_km`·`limit`·시야 체감 확인.
 
 ---
 
