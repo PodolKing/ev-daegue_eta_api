@@ -1,10 +1,14 @@
+import math
+from decimal import Decimal
+
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-# Defaults per team agreement (§3.2)
+
 DEFAULT_RADIUS_KM = 3.0
 MAX_RADIUS_KM = 10.0
 DEFAULT_LIMIT = 50
-MAX_LIMIT = 100
+MAX_LIMIT = 200
 
 
 def clamp_radius_km(radius_km: float) -> float:
@@ -13,6 +17,12 @@ def clamp_radius_km(radius_km: float) -> float:
 
 def clamp_limit(limit: int) -> int:
     return max(1, min(limit, MAX_LIMIT))
+
+
+def _as_float(value: object) -> float:
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)  # type: ignore[arg-type]
 
 
 def list_stations_near(
@@ -24,9 +34,220 @@ def list_stations_near(
     limit: int = DEFAULT_LIMIT,
 ) -> list[dict]:
     """
-    TODO: bbox filter on idx_lat_lng → Haversine → aggregate by stat_id
-    → LEFT JOIN status → availableCount (status '2' only; null if no valid status)
-    → sort by distanceKm ASC → limit
+    좌표 기준 직선거리 반경 내 충전소 조회
     """
-    _ = (db, lat, lng, radius_km, limit)
-    raise NotImplementedError("stations service: implement DB query (see docs/stations_api.md)")
+
+    radius_km = clamp_radius_km(radius_km)
+    limit = clamp_limit(limit)
+
+    lat_delta = radius_km / 111.0
+    cos_lat = math.cos(math.radians(lat))
+
+    lng_delta = (
+        radius_km / (111.0 * abs(cos_lat))
+        if abs(cos_lat) > 1e-6
+        else radius_km / 111.0
+    )
+
+    min_lat = lat - lat_delta
+    max_lat = lat + lat_delta
+    min_lng = lng - lng_delta
+    max_lng = lng + lng_delta
+
+    sql = text(
+        """
+        SELECT
+            i.stat_id AS station_id,
+            MAX(i.stat_nm) AS name,
+            MAX(i.addr) AS address,
+            MAX(i.lat) AS lat,
+            MAX(i.lng) AS lng,
+
+            (
+                6371 * ACOS(
+                    LEAST(
+                        1,
+                        GREATEST(
+                            -1,
+                            COS(RADIANS(:lat))
+                            * COS(RADIANS(MAX(i.lat)))
+                            * COS(RADIANS(MAX(i.lng)) - RADIANS(:lng))
+                            + SIN(RADIANS(:lat))
+                            * SIN(RADIANS(MAX(i.lat)))
+                        )
+                    )
+                )
+            ) AS distance_km,
+
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1
+                        ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN s.charger_status = '2'
+                        THEN 1
+                        ELSE 0
+                    END
+                )
+            END AS available_count,
+
+            COUNT(DISTINCT i.chger_id) AS charger_total
+
+        FROM ev_charger_info AS i
+
+        LEFT JOIN ev_charger_status AS s
+            ON i.stat_id = s.stat_id
+           AND i.chger_id = s.chger_id
+
+        WHERE i.lat IS NOT NULL
+          AND i.lng IS NOT NULL
+          AND i.lat BETWEEN :min_lat AND :max_lat
+          AND i.lng BETWEEN :min_lng AND :max_lng
+
+        GROUP BY i.stat_id
+
+        HAVING distance_km <= :radius_km
+
+        ORDER BY distance_km ASC
+
+        LIMIT :limit
+        """
+    )
+
+    rows = db.execute(
+        sql,
+        {
+            "lat": lat,
+            "lng": lng,
+            "min_lat": min_lat,
+            "max_lat": max_lat,
+            "min_lng": min_lng,
+            "max_lng": max_lng,
+            "radius_km": radius_km,
+            "limit": limit,
+        },
+    ).mappings().all()
+
+    return [
+        {
+            "station_id": row["station_id"],
+            "name": row["name"],
+            "address": row["address"],
+            "lat": _as_float(row["lat"]),
+            "lng": _as_float(row["lng"]),
+            "available_count": (
+                None
+                if row["available_count"] is None
+                else int(row["available_count"])
+            ),
+            "distance_km": round(_as_float(row["distance_km"]), 3),
+            "charger_total": (
+                None
+                if row["charger_total"] is None
+                else int(row["charger_total"])
+            ),
+            "source_mode": "LIVE",
+        }
+        for row in rows
+    ]
+
+
+def list_stations_viewport(
+    db: Session,
+    *,
+    min_lat: float,
+    max_lat: float,
+    min_lng: float,
+    max_lng: float,
+    limit: int = DEFAULT_LIMIT,
+) -> list[dict]:
+    """
+    지도 화면 영역(bbox) 내 충전소 조회
+    """
+
+    limit = clamp_limit(limit)
+
+    sql = text(
+        """
+        SELECT
+            i.stat_id AS station_id,
+            MAX(i.stat_nm) AS name,
+            MAX(i.addr) AS address,
+            MAX(i.lat) AS lat,
+            MAX(i.lng) AS lng,
+
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1
+                        ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN s.charger_status = '2'
+                        THEN 1
+                        ELSE 0
+                    END
+                )
+            END AS available_count,
+
+            COUNT(DISTINCT i.chger_id) AS charger_total
+
+        FROM ev_charger_info AS i
+
+        LEFT JOIN ev_charger_status AS s
+            ON i.stat_id = s.stat_id
+           AND i.chger_id = s.chger_id
+
+        WHERE i.lat IS NOT NULL
+          AND i.lng IS NOT NULL
+          AND i.lat BETWEEN :min_lat AND :max_lat
+          AND i.lng BETWEEN :min_lng AND :max_lng
+
+        GROUP BY i.stat_id
+
+        ORDER BY i.stat_id
+
+        LIMIT :limit
+        """
+    )
+
+    rows = db.execute(
+        sql,
+        {
+            "min_lat": min_lat,
+            "max_lat": max_lat,
+            "min_lng": min_lng,
+            "max_lng": max_lng,
+            "limit": limit,
+        },
+    ).mappings().all()
+
+    return [
+        {
+            "station_id": row["station_id"],
+            "name": row["name"],
+            "address": row["address"],
+            "lat": _as_float(row["lat"]),
+            "lng": _as_float(row["lng"]),
+            "available_count": (
+                None
+                if row["available_count"] is None
+                else int(row["available_count"])
+            ),
+            "charger_total": (
+                None
+                if row["charger_total"] is None
+                else int(row["charger_total"])
+            ),
+            "source_mode": "LIVE",
+        }
+        for row in rows
+    ]
