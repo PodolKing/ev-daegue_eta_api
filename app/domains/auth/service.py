@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.domains.auth.models import User
+from app.domains.auth.models import User, UserRole
 
 
 def hash_password(plain: str) -> str:
@@ -93,7 +93,7 @@ def signup(
             password=hash_password(password),
             nickname=nickname,
             point=0,
-            role="USER",
+            role=UserRole.USER,
             is_active=True,
             created_at=now,
             updated_at=now,

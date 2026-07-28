@@ -968,6 +968,33 @@ PC 전용으로 되돌릴 때:
 
 ---
 
+## 2026-07-28 — User ORM auth 단일화 (DDL 반영)
+
+### 한 일
+- `auth/models.py`: `users` DDL 맞춤 (`detail_address`, `user_lat`, `user_lng`, `UserRole`, nickname unique).
+- `stations/models.py`: 중복 `User`/`UserRole` 제거 — `Table 'users' already defined` 해소.
+
+### 결정
+- `User` 소유는 **auth** 도메인. stations는 `UserFavoriteCharger` 등 FK 문자열만 유지.
+
+### 다음
+- signup API에 `detail_address`·좌표 필드 반영 여부 합의.
+
+---
+
+## 2026-07-28 — requirements.txt 충돌 방지 규칙
+
+### 한 일
+- Agent/팀 규칙: `api/requirements.txt`는 **새 패키지 맨 아래 append**, 중간 삽입·전체 정렬 금지(conflict 방지). `.cursor/rules/api-files.mdc`, `docs/rules/03_conventions.md`.
+
+### 결정
+- 버전만 올릴 때는 해당 줄만 수정. BE 의존성 추가 시 requirements 동시 갱신.
+
+### 다음
+- (없음)
+
+---
+
 ## 2026-07-28 — 회원가입·로그인 페이지 스크롤
 
 ### 한 일
