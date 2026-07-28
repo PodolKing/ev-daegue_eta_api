@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     cors_origins: str = "http://localhost:3000"
+    # LAN mobile: allow any host in 172.30.1.0/24 (DHCP IP churn). Empty = disabled.
+    cors_origin_regex: str = r"http://172\.30\.1\.\d+:\d+"
 
     db_host: str = "127.0.0.1"
     db_port: int = 3306
@@ -23,6 +25,19 @@ class Settings(BaseSettings):
 
     tmap_app_key: str = ""
     data_go_kr_key: str = ""
+
+    # EvCharger status collector (see domains/stations/sync.py)
+    # Base e.g. https://apis.data.go.kr/B552584/EvCharger  (getChargerStatus appended)
+    ev_charger_api_url: str = ""
+    # Default OFF — PC·운영 동시 수집 방지. 수집 서버만 true.
+    ev_status_sync_enabled: bool = False
+    ev_status_interval_minutes: int = 5
+    ev_status_period_minutes: int = 5
+    # 대구 시도코드(행정구역 앞 2자리). 빈 문자열이면 zcode 미전송(전국).
+    ev_status_zcode: str = "27"
+    ev_status_num_of_rows: int = 9999
+    # Soft cap (process memory). 5분×288≈일 + 여유. 개발계정 한도(~1000) 대비.
+    ev_status_daily_call_limit: int = 400
 
     @property
     def sqlalchemy_database_url(self) -> str:

@@ -1,4 +1,4 @@
-# Team Developer Log
+﻿# Team Developer Log
 
 > 팀·에이전트 공통 개발 기록 + **로컬 실행·세팅 안내**.  
 > **시크릿·실키·비밀번호·개인정보·내부 전용 호스트/계정 실값은 적지 않는다.**  
@@ -161,23 +161,34 @@ npm run dev
 
 폰의 `localhost`는 폰 자신이다. PC LAN IP로 FE/BE를 열어야 한다.  
 PC 전용 명령(`uvicorn … --port 8000` only, host 생략)으로는 **폰 앱 테스트가 안 된다.**  
-`--host 0.0.0.0`만으로는 부족하고, **FE `dev:lan` + env(CORS·API base)** 가 같이 필요하다.
+`--host 0.0.0.0` + FE `npm run dev:lan` 필요.
 
-**현재 예시 IP:** `172.30.1.7` (공유기 재연결·DHCP면 바뀔 수 있음. `ipconfig`의 IPv4로 확인)
+**공유기 on/off·DHCP:** PC IPv4(`172.30.1.x`)만 바뀐다. **DB 계정·비밀번호·스키마는 안 바뀐다.**
+
+| 구분 | 공유기 재시작 영향 | 팀 권장 |
+|---|---|---|
+| DB (`DB_HOST`) | 없음 (각자 `127.0.0.1`) | **팀원끼리 LAN IP로 DB 공유하지 말 것** |
+| 폰→PC API/FE | PC IP만 바뀜 | 폰에서 `http://<새IP>:3000`만 다시 입력 |
+| CORS / API base | 코드가 `172.30.1.*` 허용 + FE는 page hostname:8000 | IP 바뀔 때 env 재수정 불필요 |
 
 #### 세팅 검토 체크리스트 (값·키 내용은 커밋/문서에 적지 말 것)
 
-| # | 항목 | 검토 결과(예시 IP `172.30.1.7` 기준) |
+| # | 항목 | 검토 |
 |---|---|---|
-| 1 | `api/.env` → `CORS_ORIGINS` | `http://localhost:3000,http://172.30.1.7:3000` 형태여야 함 |
-| 2 | `web/.env.local` → `NEXT_PUBLIC_API_BASE_URL` | `http://172.30.1.7:8000` (trailing slash 없음) |
-| 3 | `web/package.json` → `dev:lan` | `next dev --hostname 0.0.0.0` 있음 |
-| 4 | BE 실행 | **`--host 0.0.0.0 --port 8000`** 필수 |
-| 5 | FE 실행 | **`npm run dev:lan`** 필수 |
-| 6 | (선택) TMAP 콘솔 | 지도 키 도메인 제한 시 `http://172.30.1.7:3000` 허용 |
-| 7 | Windows 방화벽 | 3000·8000 인바운드 허용 |
+| 1 | `api/.env` → `CORS_ORIGINS` | `http://localhost:3000`면 충분 (LAN은 `CORS_ORIGIN_REGEX` 기본값) |
+| 2 | `web/.env.local` → `NEXT_PUBLIC_API_BASE_URL` | PC용 `http://localhost:8000` 유지. 폰은 hostname 자동 |
+| 3 | `web/package.json` → `dev:lan` | `next dev --hostname 0.0.0.0` |
+| 4 | BE 실행 | **`--host 0.0.0.0 --port 8000`** |
+| 5 | FE 실행 | **`npm run dev:lan`** |
+| 6 | (선택) TMAP 콘솔 | 도메인 제한 시 LAN Origin 허용 여부 확인 |
+| 7 | Windows 방화벽 | 3000·8000 인바운드 |
 
-> **검토 시점:** 위 1~3은 로컬 env/스크립트에 반영됨. 4~5는 아래 명령으로 실행. 실 키·비밀번호는 이 문서에 적지 않음.
+#### 팀원과 같이 작업할 때 (DB)
+
+1. **기본:** 각자 PC에 MariaDB + `DB_HOST=127.0.0.1`. `.env`는 커밋하지 않음.
+2. **스키마/시드:** git·덤프·마이그레이션으로 맞추고, **접속 주소는 LAN IP로 공유하지 않음** (DHCP면 매번 깨짐).
+3. **공통 DB가 필요하면:** 고정 호스트(클라우드/서버 DNS) 한 곳을 쓰고, 접속 정보는 메신저 등으로만 공유 (git 금지).
+4. **코드·API 계약**만 리포로 공유. LAN IP·DB 비번은 문서/커밋에 넣지 않음.
 
 #### 풀 실행 명령 (모바일 · 워크스페이스 `ev-daegue_eta` 기준)
 
@@ -193,26 +204,23 @@ npm run dev:lan
 
 | 어디서 | URL |
 |---|---|
-| 폰 브라우저 (같은 Wi‑Fi) | http://172.30.1.7:3000/map |
-| 폰에서 API 직접 확인(선택) | http://172.30.1.7:8000/health |
-| PC에서도 LAN으로 열기 | http://172.30.1.7:3000/map |
+| 폰 브라우저 (같은 Wi‑Fi) | `http://<PC-IPv4>:3000/map` (`ipconfig`로 확인) |
+| 폰에서 API 직접 확인(선택) | `http://<PC-IPv4>:8000/health` |
+| PC 브라우저 | http://localhost:3000/map |
 
-`NEXT_PUBLIC_*`를 바꿨으면 **터미널 B(Next)를 반드시 재시작**.
+#### IP가 바뀌었을 때
 
-#### IP가 바뀌었을 때 수정할 곳
+**보통 env 수정 불필요.** 폰 주소만 새 PC IP로 다시 열면 됨.  
+(구버전처럼 `CORS_ORIGINS` / `NEXT_PUBLIC_API_BASE_URL`에 LAN IP를 박아 둔 경우만 정리)
 
-코드(`config.py` 기본값)는 바꿀 필요 없음. **로컬 env·실행·(선택) TMAP 콘솔만.**
-
-| 위치 | 수정 내용 |
+| 위치 | 할 일 |
 |---|---|
-| `api/.env` | `CORS_ORIGINS`에 `http://<새IP>:3000` 포함 (예: `http://localhost:3000,http://172.30.1.7:3000`) |
-| `web/.env.local` | `NEXT_PUBLIC_API_BASE_URL=http://<새IP>:8000` (trailing slash 없음). 바꾼 뒤 **Next 재시작** |
-| (선택) TMAP 콘솔 | 지도 키에 도메인/Referer 제한이 있으면 `http://<새IP>:3000` 허용. 제한 없으면 생략 |
-| 실행 명령 | 아래 풀 명령의 IP만 새 값으로 + API는 계속 `--host 0.0.0.0` |
-| Windows 방화벽 | 3000·8000 인바운드가 막히면 같은 망인데도 안 열림 |
+| 폰 브라우저 | `http://<새IP>:3000/map` |
+| `api/.env` / `web/.env.local` | localhost만 쓰면 그대로 |
+| (선택) TMAP 콘솔 | Referer 제한이 있으면 새 Origin 허용 |
+| Windows 방화벽 | 3000·8000 |
 
-**커밋하지 말 것:** `api/.env`, `web/.env.local` (실 IP·키).  
-참고용 키 이름만: `api/.env.example`, `web/.env.example` 주석.
+**커밋하지 말 것:** `api/.env`, `web/.env.local`.
 
 PC 전용으로 되돌릴 때:
 
@@ -730,6 +738,80 @@ PC 전용으로 되돌릴 때:
 
 ### 다음
 - 1/2/3 탭 시 Network `radius_km`·`limit`·시야 체감 확인.
+
+---
+
+## 2026-07-28 — LAN 172.30.1.* 고정 없이 폰 테스트 + 팀 DB 안내
+
+### 한 일
+- BE: `CORS_ORIGIN_REGEX` 기본값으로 `http://172.30.1.*:<port>` Origin 허용 (DHCP IP 변경 대응).
+- FE: `getApiBase()` — 폰에서 page hostname:8000 자동 (LAN IP를 env에 안 박음).
+- Next: `allowedDevOrigins`에 `172.30.1.1`–`.254` 포함.
+- 온보딩 §7: 공유기 재시작 ≠ DB 변경, 팀원은 `DB_HOST=127.0.0.1` 각자 로컬(또는 고정 DNS 공유 DB).
+
+### 결정
+- 팀 협업 시 LAN IP로 DB 공유하지 않음. 코드·스키마만 git, 접속정보는 로컬/메신저.
+
+### 다음
+- BE·FE 재시작 후 폰에서 새 IP로 `/map`만 열어 확인. `.env`의 옛 LAN IP는 localhost로 정리해도 됨.
+
+---
+
+## 2026-07-28 — users / favorites ORM 모델 정리
+
+### 한 일
+- `stations/models.py`: 깨져 있던 `User`를 DB DDL(`users`)에 맞게 수정.
+- `UserRole` enum, `UserFavoriteCharger`(`user_favorite_chargers`) 추가. `ev_charger_info` 복합 FK 반영.
+
+### 결정
+- 테이블명 `users` (단수 `user` 아님). 즐겨찾기는 `(user_id, stat_id, chger_id)` 유니크.
+
+### 다음
+- auth/favorites API·스키마 연동 시 이 모델 사용.
+
+---
+
+## 2026-07-28 — cars / car_models ORM 추가
+
+### 한 일
+- `stations/models.py`에 `CarModel`(`car_models`), `Car`(`cars`) 추가.
+- `FuelType`(EV/PHEV), `ChargingPort`(CCS1/NACS/CHADEMO) enum 반영. `cars.user_id` ON DELETE CASCADE.
+
+### 결정
+- `car_model_id`·`nickname`·`custom_model_name` nullable (커스텀 차명 허용).
+
+### 다음
+- 차량 CRUD API 연동 시 이 모델 사용.
+
+---
+
+## 2026-07-28 — status sync 1차 연동 (경고·일일한도)
+
+### 한 일
+- `stations/sync.py`: 공공 `getChargerStatus` 호출 → `ev_charger_status` bulk upsert. 기동 경고(PC·운영 동시 수집 금지), 프로세스 일일 outbound soft cap, `max_instances=1`.
+- `main.py` lifespan에서 스케줄러 start/stop. `EV_STATUS_SYNC_ENABLED` 기본 false.
+- `config` / `.env.example`에 sync 관련 env 이름 추가. `APScheduler` requirements 반영.
+
+### 결정
+- 수집은 **한 호스트만** ON. PC 개발은 개인 DB + sync OFF. 운영만 true.
+- 대구 `zcode=27`, period/interval 5분, 일 한도 기본 400(프로세스 메모리).
+
+### 다음
+- 로컬에서 `EV_STATUS_SYNC_ENABLED=true`로 단발 검증 후 바로 OFF. 응답 파싱·키 인코딩 이슈 있으면 보정.
+- 운영 반영 시 worker=1, `--reload` 금지.
+
+---
+
+## 2026-07-28 — Agent 프롬프트(수집·info 보강)
+
+### 한 일
+- `docs/agent_prompt_ev_charger_sync.md` 추가(복사용 프롬프트·지시 예시·외부 프로그램 골격). `api/docs`·`web/docs` 동기화.
+
+### 결정
+- status 5분(BE)과 info 보강(외부/저빈도) 분리. Agent 재시작 시 해당 문서 `@` 첨부.
+
+### 다음
+- 외부 info upsert 스크립트는 별도 지시로 구현.
 
 ---
 
