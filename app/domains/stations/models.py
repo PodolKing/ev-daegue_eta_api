@@ -44,28 +44,6 @@ class EvChargerStatus(Base):
     last_updated = Column(DateTime)
 
 
-class UserRole(str, enum.Enum):
-    USER = "USER"
-    MANAGER = "MANAGER"
-    ADMIN = "ADMIN"
-
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(String(50), nullable=False, unique=True)
-    password = Column(String(255), nullable=False)
-    nickname = Column(String(30), nullable=False)
-    point = Column(Integer, nullable=False, default=0)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.USER)
-    is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False)
-    deleted_at = Column(DateTime, nullable=True)
-    address = Column(String(255), nullable=True)
-
-
 class UserFavoriteCharger(Base):
     __tablename__ = "user_favorite_chargers"
     __table_args__ = (
