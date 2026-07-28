@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     tmap_app_key: str = ""
     data_go_kr_key: str = ""
 
+    # Local auth JWT (Kakao OAuth keys stay separate / later)
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24  # 1 day
+
     @property
     def sqlalchemy_database_url(self) -> str:
         if self.database_url:
