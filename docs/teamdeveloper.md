@@ -1,4 +1,4 @@
-﻿# Team Developer Log
+# Team Developer Log
 
 > 팀·에이전트 공통 개발 기록 + **로컬 실행·세팅 안내**.  
 > **시크릿·실키·비밀번호·개인정보·내부 전용 호스트/계정 실값은 적지 않는다.**  
@@ -246,16 +246,16 @@ PC 전용으로 되돌릴 때:
 
 ---
 
-## 요약 (2026-07-27 기준)
+## 요약 (2026-07-28 기준)
 
 | 구분 | 내용 |
 |---|---|
-| 진행 단계 | 지도 **동결** · 모바일 검색 토글 · 위치 안내 |
-| FE | `/map` 정상. SDK=`loadSdk` **topopentile 우선**. 검색 아이콘 토글. 반경 fitBounds=사용자 탭만 |
-| BE | FastAPI 뼈대, stations/auth, places TMAP POI 프록시 |
+| 진행 단계 | 지도 **동결** · **위치 추적(watch)** · **주행 테스트** · stations throttle |
+| FE | `/map` 정상. 추적/테스트 FAB. 반경 줌=1/2/3 탭만. 원=`coords` 재생성 |
+| BE | FastAPI · stations/auth/places · status sync 옵션 |
 | 문서 | **`docs/important.md` 필독(잠금)**. rules, MAP_KEY/APP_KEY 분리 |
 | Git | `web/`·`api/` 별도 리포. 상위는 git 없음 |
-| 다음 | stations 좌표 마커 → OAuth/세션 → 위치 watch → 포인트 (**지도 SDK는 잠금**) |
+| 다음 | 시험주행·기본 GPS 추적 실기 확인 · throttle 수치 조정 |
 
 기준 합의: 워크스페이스 `docs/프로젝트_현황_및_합의사항_20260723.md` (변수명·코드 의미 변경 금지)
 
@@ -812,6 +812,172 @@ PC 전용으로 되돌릴 때:
 
 ### 다음
 - 외부 info upsert 스크립트는 별도 지시로 구현.
+
+---
+
+## 2026-07-28 — 위치 추적 · 주행 테스트 · stations throttle
+
+### 한 일
+1. **타입** (`web/src/types/location.ts`)  
+   - `LocationStatus` 설명 보강, `LocationDriveMode`(`off`/`watch`/`test`) 추가.
+2. **locationStore** (`web/src/stores/locationStore.ts`)  
+   - `startWatch` / `stopWatch`: `watchPosition` + `watchId` / `isWatching`.  
+   - `setTestMode(true)` → GPS watch 중지. **`setTestMode(false)`는 watch 자동 시작 안 함**.  
+   - `setTestCoords`: testMode일 때만 fake GPS.
+3. **RadiusControl**  
+   - 원은 `coords`(없으면 map center) 기준 **destroy→재생성**.  
+   - TMAP `Circle.setCenter` in-place는 원 소실 회귀로 **사용 안 함**.  
+   - 카메라 줌은 **1/2/3 탭만** (동결 유지).
+4. **AppShell**  
+   - stations 재조회: 반경 변경=즉시, coords는 **200m 또는 4초**(미만은 trailing debounce).
+5. **MapView + features**  
+   - `FEATURES.locationWatch` / `drivingTestMode`.  
+   - FAB: 추적 on/off → `startWatch`/`stopWatch`, follow 연동. 드래그 시 follow off(기존).  
+   - FAB: 테스트 on/off. ON이면 지도 **클릭/탭** → `setTestCoords`.  
+   - follow 중 coords 변경 시 카메라만 따라감(줌 변경 없음).  
+   - SDK 로드·createMap·RadiusControl 카메라 프리셋 **미변경**.
+
+### 결정
+- BE 추가 없음(기존 `lat/lng/radius` 조회). 2.5만 건 → 전체 캐시 비추천.  
+- **watching ≠ follow**. 차량·배터리 → 추적 off 필요.  
+- 테스트 off ≠ GPS on (명시적 `startWatch`만).  
+- 테스트 입력은 모바일 친화 **지도 탭** 우선.  
+- 개발 중 Desktop+OneDrive가 `--reload` 폭풍을 만들 수 있음 → 동기화 일시 중지 권장.
+
+### 다음
+- 추적/테스트 FAB 카피·배치 다듬기.  
+- throttle 수치(200m/4초) 실차 체감 후 조정.  
+- (선택) 데스크톱 현위치 마커 드래그.  
+- Desktop 밖 경로 또는 OneDrive 바탕화면 백업 OFF.
+
+---
+
+## 2026-07-28 — 주행 테스트 탭 수정
+
+### 한 일
+- `MapView`: 테스트 ON 시 전면 탭 레이어 + `screenToReal`/`getBounds` 폴백으로 좌표 반영.  
+- TMAP `latLng.lat`가 함수/숫자/`_lat` 모두 파싱. `map.addListener("click")` 병행.  
+- 테스트 켜면 현재 center/coords로 시드해 마커·원이 바로 보이게.
+
+### 결정
+- 테스트 중 지도 팬은 탭 레이어에 가려짐(탭으로 위치 이동이 목적).
+
+### 다음
+- 실기에서 탭→원/마커 이동 확인.
+
+---
+
+## 2026-07-28 — GPS 기본 추적 · 시험주행 FAB
+
+### 한 일
+- **추적 버튼 제거.** `AppShell`에서 `locateOnce` 후 기본 `startWatch` + `follow`.  
+- 반경·목록 origin은 **실 GPS 변경** 또는 **시험주행 탭**일 때만 움직임.  
+- FAB: 자동차 아이콘 ↔ `ON` 토글, hover/focus 시 「시험주행」 라벨.  
+- 시험주행 OFF 시 GPS watch 재개.
+
+### 결정
+- 위치 추적은 opt-in 버튼이 아니라 기본 동작. 시험주행만 명시 토글.
+
+### 다음
+- 실기에서 기본 추적·시험주행 탭 확인.
+
+---
+
+## 2026-07-28 — 시험주행 PC 드래그/줌
+
+### 한 일
+- PC(`hover`+`pointer: fine`): 전면 탭 레이어 **제거** → TMAP click으로 위치, **드래그·휠 줌 가능**.  
+- 모바일(coarse): 기존 탭 레이어 유지.
+
+### 결정
+- PC는 지도 제스처 우선, 클릭만 시험 위치.
+
+### 다음
+- 모바일에서도 탭/드래그 구분 필요하면 이어서.
+
+---
+
+## 2026-07-28 — 모바일 페이지 줌 방지 · 지도 제스처
+
+### 한 일
+- `layout` viewport: `maximumScale=1`, `userScalable=false` (브라우저 화면 확대 차단).  
+- `#ev-tmap-map { touch-action: none }` — 핀치/팬을 TMAP으로.  
+- 시험주행 전면 탭 레이어 **완전 제거** (PC·모바일 공통: TMAP click으로 위치).
+
+### 결정
+- 시험주행 중에도 지도 드래그·핀치 가능. 위치는 탭/클릭.
+
+### 다음
+- 폰에서 핀치=지도 줌, 탭=시험 위치 확인.
+
+---
+
+## 2026-07-28 — 시험주행 모바일 탭 복구
+
+### 한 일
+- 짧은 **한 손가락 탭**(이동 12px·450ms 이내)만 `screenToReal`로 위치 반영.  
+- 핀치/드래그는 `preventDefault` 없이 지도에 그대로 전달. TMAP click은 PC용 유지.
+
+### 결정
+- 전면 차단 레이어 없이 탭·줌 병행.
+
+### 다음
+- 실기 탭 감도(12px/450ms) 필요 시 조정.
+
+---
+
+## 2026-07-28 — 반경 원 클릭 통과
+
+### 한 일
+- `RadiusControl` Circle에 `clickable: false` — 원 안 탭/클릭이 지도·시험주행으로 전달되게 함.  
+  (1km 원이 화면을 크게 덮어 클릭이 먹통이던 문제. **의도된 동작 아님**)
+
+### 결정
+- 반경 원은 표시 전용. 상호작용은 지도/마커가 받음.
+
+### 다음
+- 원 안 시험주행 탭·PC 클릭 재확인.
+
+---
+
+## 2026-07-28 — 시험주행 탭 재수정 (원 숨김 + capture)
+
+### 한 일
+- 시험주행 ON 시 **반경 Circle 미표시** (`clickable:false`만으로는 TMAP이 탭을 계속 가로챔).  
+- 지도 div에 **capture 단계** pointer/touch 탭 감지 → `screenToReal`.  
+- 핀치·드래그는 preventDefault 없음.
+
+### 결정
+- 시험 중 원은 숨기고, 반경 API·목록 throttle은 coords 기준으로 유지.
+
+### 다음
+- 실기에서 원 자리·빈 지도 모두 탭/클릭 확인.
+
+---
+
+## 2026-07-28 — 회원가입 주소 입력 UI
+
+### 한 일
+- `/signup`: **주소**(다음 주소 검색 버튼·readonly, 연동 TODO) + **상세주소** 필드 추가.
+
+### 결정
+- Daum Postcode는 `openAddressSearch` stub. BE register 필드는 추후 합의.
+
+### 다음
+- 다음 주소 API 연동 · register API에 address 전달.
+
+---
+
+## 2026-07-28 — 회원가입·로그인 페이지 스크롤
+
+### 한 일
+- `/signup`, `/login`: 루트 `body overflow-hidden` 때문에 폼이 잘리던 문제 — 페이지 루트를 `h-dvh overflow-y-auto` 스크롤 컨테이너로 변경.
+
+### 결정
+- 지도 앱용 `body` overflow 락은 유지. 인증 페이지만 내부 스크롤.
+
+### 다음
+- (없음)
 
 ---
 
