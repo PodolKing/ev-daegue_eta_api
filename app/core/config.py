@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     ev_status_num_of_rows: int = 9999
     # Soft cap (process memory). 5분×288≈일 + 여유. 개발계정 한도(~1000) 대비.
     ev_status_daily_call_limit: int = 400
+    # Local auth JWT (Kakao OAuth keys stay separate / later)
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24  # 1 day
 
     @property
     def sqlalchemy_database_url(self) -> str:
