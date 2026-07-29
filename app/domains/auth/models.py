@@ -33,3 +33,4 @@ class User(Base):
     detail_address = Column(String(255), nullable=True)
     user_lat = Column(Numeric(10, 8), nullable=True)
     user_lng = Column(Numeric(11, 8), nullable=True)
+    email = Column(String(255), nullable=True)

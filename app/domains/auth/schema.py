@@ -12,6 +12,10 @@ class SignupRequest(CamelModel):
     nickname: str
     address: str | None = None
     detail_address: str | None = None
+    user_lat: float | None = None
+    user_lng: float | None = None
+    email: str | None = None
+    
 
 
 class LoginRequest(CamelModel):
@@ -33,6 +37,9 @@ class UserPublic(CamelModel):
     created_at: datetime
     updated_at: datetime
     social_provider: str | None = None  # 로컬은 null, 카카오 연동 시 사용
+    user_lat: float | None = None
+    user_lng: float | None = None
+    email: str | None = None
 
 
 class MeResponse(CamelModel):

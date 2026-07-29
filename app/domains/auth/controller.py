@@ -34,6 +34,9 @@ def signup(db: Session | None, body: SignupRequest) -> SignupResponse:
         nickname=body.nickname,
         address=body.address,
         detail_address=body.detail_address,
+        user_lat=body.user_lat,
+        user_lng=body.user_lng,
+        email=body.email,
     )
     return SignupResponse(user=_to_public(user))
 
