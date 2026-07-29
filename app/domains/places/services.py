@@ -2,7 +2,7 @@ from app.domains.places.client import fetch_tmap_places
 from app.domains.places.place import PlaceResult
 
 
-async def search_tmap_places(
+async def search_places(
     keyword: str,
     lat: float | None = None,
     lng: float | None = None,

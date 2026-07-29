@@ -23,8 +23,11 @@ Distance is **DB Haversine** (bbox → filter → sort). Not TMAP route distance
       "lat": 35.8714,
       "lng": 128.6014,
       "availableCount": 2,
+      "availableCountOther": 1,
+      "availableCountSlow": 1,
       "distanceKm": 0.84,
       "chargerTotal": 4,
+      "chargerTypes": ["02", "04"],
       "sourceMode": "LIVE"
     }
   ],
@@ -37,8 +40,9 @@ Distance is **DB Haversine** (bbox → filter → sort). Not TMAP route distance
 ## Rules (do not change)
 
 - Aggregate by `stat_id` (station), not charger row.
-- `availableCount`: count of chargers with `charger_status = '2'` (충전대기).
-- If no valid status observation for the station → `availableCount: null` (**null ≠ 0**).
+- `availableCount`: all chargers with `charger_status = '2'` (충전대기) — **합계** (마커·리스트용).
+- `availableCountOther` / `availableCountSlow`: same rule scoped by `chgerType` (slow = `02`/`08`; other = not slow, null type → other). Detail breakdown only.
+- If no valid status observation in that bucket → that field is `null` (**null ≠ 0**).
 - Status codes: `1` 통신이상 / `2` 충전대기 / `3` 충전중 / `4` 운영중지 / `5` 점검중 / `9` 상태미확인.
 - Exclude rows with null `lat`/`lng`.
 - Sort by `distanceKm` ascending.

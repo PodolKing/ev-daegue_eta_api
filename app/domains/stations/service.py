@@ -10,7 +10,6 @@ MAX_RADIUS_KM = 10.0
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
-
 def clamp_radius_km(radius_km: float) -> float:
     return max(0.1, min(radius_km, MAX_RADIUS_KM))
 
@@ -23,6 +22,97 @@ def _as_float(value: object) -> float:
     if isinstance(value, Decimal):
         return float(value)
     return float(value)  # type: ignore[arg-type]
+
+
+def _nullable_int(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _split_charger_types(value: object) -> list[str]:
+    """GROUP_CONCAT(DISTINCT chger_type) → code list (e.g. ['02','04'])."""
+    if value is None:
+        return []
+    text_value = str(value).strip()
+    if not text_value:
+        return []
+    return [part for part in text_value.split(",") if part]
+
+
+def _station_row(row) -> dict:
+    return {
+        "station_id": row["station_id"],
+        "name": row["name"],
+        "address": row["address"],
+        "lat": _as_float(row["lat"]),
+        "lng": _as_float(row["lng"]),
+        "available_count": _nullable_int(row["available_count"]),
+        "available_count_other": _nullable_int(row["available_count_other"]),
+        "available_count_slow": _nullable_int(row["available_count_slow"]),
+        "distance_km": (
+            round(_as_float(row["distance_km"]), 3)
+            if "distance_km" in row and row["distance_km"] is not None
+            else None
+        ),
+        "charger_total": _nullable_int(row["charger_total"]),
+        "charger_types": _split_charger_types(row["charger_types"]),
+        "source_mode": "LIVE",
+    }
+
+
+# status='2' 집계 / 관측 없음 → NULL (null ≠ 0)
+# 그외: chger_type NOT IN (02,08) 또는 NULL/미상 → other
+_AVAIL_SQL = """
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1 ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN s.charger_status = '2'
+                        THEN 1 ELSE 0
+                    END
+                )
+            END AS available_count,
+
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN IFNULL(i.chger_type, '') NOT IN ('02','08')
+                         AND s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1 ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN IFNULL(i.chger_type, '') NOT IN ('02','08')
+                         AND s.charger_status = '2'
+                        THEN 1 ELSE 0
+                    END
+                )
+            END AS available_count_other,
+
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN i.chger_type IN ('02','08')
+                         AND s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1 ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN i.chger_type IN ('02','08')
+                         AND s.charger_status = '2'
+                        THEN 1 ELSE 0
+                    END
+                )
+            END AS available_count_slow
+"""
 
 
 def list_stations_near(
@@ -55,7 +145,7 @@ def list_stations_near(
     max_lng = lng + lng_delta
 
     sql = text(
-        """
+        f"""
         SELECT
             i.stat_id AS station_id,
             MAX(i.stat_nm) AS name,
@@ -79,24 +169,11 @@ def list_stations_near(
                 )
             ) AS distance_km,
 
-            CASE
-                WHEN SUM(
-                    CASE
-                        WHEN s.charger_status IN ('1','2','3','4','5','9')
-                        THEN 1
-                        ELSE 0
-                    END
-                ) = 0 THEN NULL
-                ELSE SUM(
-                    CASE
-                        WHEN s.charger_status = '2'
-                        THEN 1
-                        ELSE 0
-                    END
-                )
-            END AS available_count,
+{_AVAIL_SQL},
 
-            COUNT(DISTINCT i.chger_id) AS charger_total
+            COUNT(DISTINCT i.chger_id) AS charger_total,
+
+            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types
 
         FROM ev_charger_info AS i
 
@@ -133,28 +210,7 @@ def list_stations_near(
         },
     ).mappings().all()
 
-    return [
-        {
-            "station_id": row["station_id"],
-            "name": row["name"],
-            "address": row["address"],
-            "lat": _as_float(row["lat"]),
-            "lng": _as_float(row["lng"]),
-            "available_count": (
-                None
-                if row["available_count"] is None
-                else int(row["available_count"])
-            ),
-            "distance_km": round(_as_float(row["distance_km"]), 3),
-            "charger_total": (
-                None
-                if row["charger_total"] is None
-                else int(row["charger_total"])
-            ),
-            "source_mode": "LIVE",
-        }
-        for row in rows
-    ]
+    return [_station_row(row) for row in rows]
 
 
 def list_stations_viewport(
@@ -173,7 +229,7 @@ def list_stations_viewport(
     limit = clamp_limit(limit)
 
     sql = text(
-        """
+        f"""
         SELECT
             i.stat_id AS station_id,
             MAX(i.stat_nm) AS name,
@@ -181,24 +237,11 @@ def list_stations_viewport(
             MAX(i.lat) AS lat,
             MAX(i.lng) AS lng,
 
-            CASE
-                WHEN SUM(
-                    CASE
-                        WHEN s.charger_status IN ('1','2','3','4','5','9')
-                        THEN 1
-                        ELSE 0
-                    END
-                ) = 0 THEN NULL
-                ELSE SUM(
-                    CASE
-                        WHEN s.charger_status = '2'
-                        THEN 1
-                        ELSE 0
-                    END
-                )
-            END AS available_count,
+{_AVAIL_SQL},
 
-            COUNT(DISTINCT i.chger_id) AS charger_total
+            COUNT(DISTINCT i.chger_id) AS charger_total,
+
+            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types
 
         FROM ev_charger_info AS i
 
@@ -230,24 +273,4 @@ def list_stations_viewport(
         },
     ).mappings().all()
 
-    return [
-        {
-            "station_id": row["station_id"],
-            "name": row["name"],
-            "address": row["address"],
-            "lat": _as_float(row["lat"]),
-            "lng": _as_float(row["lng"]),
-            "available_count": (
-                None
-                if row["available_count"] is None
-                else int(row["available_count"])
-            ),
-            "charger_total": (
-                None
-                if row["charger_total"] is None
-                else int(row["charger_total"])
-            ),
-            "source_mode": "LIVE",
-        }
-        for row in rows
-    ]
+    return [_station_row(row) for row in rows]
