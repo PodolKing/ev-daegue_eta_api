@@ -12,6 +12,7 @@ class StationItem(CamelModel):
     available_count_slow: int | None = None
     distance_km: float | None = None
     charger_total: int | None = None
+    charger_total_other: int | None = None
     charger_types: list[str] = []
     source_mode: str = "LIVE"
 
