@@ -10,7 +10,8 @@ class SignupRequest(CamelModel):
     user_id: str
     password: str
     nickname: str
-    address: str | None = None  # Express address1/address2 → 단일 address
+    address: str | None = None
+    detail_address: str | None = None
 
 
 class LoginRequest(CamelModel):
@@ -28,6 +29,7 @@ class UserPublic(CamelModel):
     role: str
     is_active: bool
     address: str | None = None
+    detail_address: str | None = None
     created_at: datetime
     updated_at: datetime
     social_provider: str | None = None  # 로컬은 null, 카카오 연동 시 사용

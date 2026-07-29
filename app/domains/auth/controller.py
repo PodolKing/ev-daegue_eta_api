@@ -33,6 +33,7 @@ def signup(db: Session | None, body: SignupRequest) -> SignupResponse:
         password=body.password,
         nickname=body.nickname,
         address=body.address,
+        detail_address=body.detail_address,
     )
     return SignupResponse(user=_to_public(user))
 

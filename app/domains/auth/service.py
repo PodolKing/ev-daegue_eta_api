@@ -64,6 +64,7 @@ def signup(
     password: str,
     nickname: str,
     address: str | None,
+    detail_address: str | None,
 ) -> User:
     """회원가입 — 중복 체크 + password 해시 저장."""
     try:
@@ -99,6 +100,7 @@ def signup(
             updated_at=now,
             deleted_at=None,
             address=address,
+            detail_address=detail_address,
         )
         db.add(user)
         db.commit()
