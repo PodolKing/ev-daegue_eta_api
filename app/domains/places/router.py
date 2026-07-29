@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 
 from app.domains.places.place import PlaceResult
-from app.domains.places.services_tmap import search_tmap_places
+from app.domains.places.services import search_places
 
 router = APIRouter(
     prefix="/api/v1/places",
