@@ -8,8 +8,11 @@ class StationItem(CamelModel):
     lat: float
     lng: float
     available_count: int | None = None
+    available_count_other: int | None = None
+    available_count_slow: int | None = None
     distance_km: float | None = None
     charger_total: int | None = None
+    charger_types: list[str] = []
     source_mode: str = "LIVE"
 
 

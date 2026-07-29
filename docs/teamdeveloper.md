@@ -246,16 +246,16 @@ PC 전용으로 되돌릴 때:
 
 ---
 
-## 요약 (2026-07-28 기준)
+## 요약 (2026-07-29 기준)
 
 | 구분 | 내용 |
 |---|---|
-| 진행 단계 | 지도 **동결** · **위치 추적(watch)** · **주행 테스트** · stations throttle |
-| FE | `/map` 정상. 추적/테스트 FAB. 반경 줌=1/2/3 탭만. 원=`coords` 재생성 |
-| BE | FastAPI · stations/auth/places · status sync 옵션 |
+| 진행 단계 | 지도 **동결** · 완속 필터 · 가용 합계/버킷 분해 |
+| FE | `/map` 정상. 마커·리스트=`availableCount` 합계. 상세=혼합소 other/slow 분리 |
+| BE | stations에 `availableCountOther`/`Slow` 추가(합계 필드 유지) |
 | 문서 | **`docs/important.md` 필독(잠금)**. rules, MAP_KEY/APP_KEY 분리 |
 | Git | `web/`·`api/` 별도 리포. 상위는 git 없음 |
-| 다음 | 시험주행·기본 GPS 추적 실기 확인 · throttle 수치 조정 |
+| 다음 | 혼합소 상세 숫자 실기 확인 |
 
 기준 합의: 워크스페이스 `docs/프로젝트_현황_및_합의사항_20260723.md` (변수명·코드 의미 변경 금지)
 
@@ -968,6 +968,20 @@ PC 전용으로 되돌릴 때:
 
 ---
 
+## 2026-07-28 — api/.env·.env.example 정리
+
+### 한 일
+- `api/.env`: 섹션·주석 구조 복구(DB/TMAP/수집/Auth). `EV_STATUS_SYNC_ENABLED=false`. 기존 로컬 DB·키 값 유지.
+- `api/.env.example`: `EV_CHARGER_API_URL`, `EV_STATUS_*`, JWT 블록 누락분 동기화.
+
+### 결정
+- 수집 ON은 한 호스트만; PC 기본은 sync OFF.
+
+### 다음
+- 로그인 쓰면 `JWT_SECRET` 로컬에 설정 후 uvicorn 재시작.
+
+---
+
 ## 2026-07-28 — User ORM auth 단일화 (DDL 반영)
 
 ### 한 일
@@ -1005,6 +1019,133 @@ PC 전용으로 되돌릴 때:
 
 ### 다음
 - (없음)
+
+---
+
+## 2026-07-29 — 충전기타입(chgerType) 코드↔이름 매칭
+
+### 한 일
+- `web/src/lib/chargerTypes.ts`: KECO 01–10 라벨 맵 + 완속(`02`/`08`) vs 그외 버킷 헬퍼(`stationMatchesTypeFilter` 등).
+
+### 결정
+- UI 필터는 완속/그외 이분. 표시명은 공식 코드표 기준. FE 필터용이며 stations 응답에 타입 배열 추가(BE)는 후속.
+
+### 다음
+- stations API에 `chgerTypes` 집계 필드 추가 후 StationList/마커에 필터 연결.
+
+---
+
+## 2026-07-29 — stations 응답에 chargerTypes 추가
+
+### 한 일
+- `list_stations_near` / `list_stations_viewport`: `GROUP_CONCAT(DISTINCT chger_type)` → `charger_types` 리스트.
+- `StationItem.charger_types`, FE `Station.chargerTypes` 타입 반영. SQL CASE 라벨 변환은 하지 않음(FE 매칭).
+
+### 결정
+- BE는 원본 코드만. 이름·완속 버킷은 FE `chargerTypes.ts`.
+
+### 다음
+- StationList/마커에 완속·그외 필터 UI 연결.
+
+---
+
+## 2026-07-29 — StationDetailCard 충전기 타입 표시
+
+### 한 일
+- 상세 카드에 `chargerTypes` → 라벨 칩(완속=초록, 그외=액센트). 타입 없으면 안내 문구.
+
+### 결정
+- 표시만; 목록/마커 필터 UI는 후속.
+
+### 다음
+- StationList/마커 완속·그외 필터 연결.
+
+---
+
+## 2026-07-29 — MapView 분리 원칙 문서화
+
+### 한 일
+- `tmap-sdk-lock.mdc` · `important.md` §2.2 · `01_agent_permissions` · `03_conventions` · `project-overview`: MapView에는 지도 필수만, 그 외 UI/필터는 형제·store·lib로 분리.
+
+### 결정
+- 신규 기능은 MapView 본문 확장 금지(조합만). 잠긴 부트스트랩 줄 수 리팩터 금지.
+
+### 다음
+- (없음)
+
+---
+
+## 2026-07-29 — 모바일 목록 접기 + 선택 시 센터
+
+### 한 일
+- `mobileListOpen` + `selectStation`: 목록/마커 선택 시 시트 접기 · 줌 유지 · `setCenter`만 · follow 해제.
+- AppShell 시트 핸들 토글 · FAB/상세는 `--map-sheet-offset` (열림 42dvh / 접힘 peek).
+- MapView는 bottom 클래스만 CSS 변수로 (부트스트랩 미변경).
+
+### 결정
+- 모바일 기본 UX: 선택 → 지도 중심 + 목록 접어 마커 탭 면적 확보.
+
+### 다음
+- 완속 필터 아이콘 토글. 실기기에서 마커 탭·시트 제스처 확인.
+
+---
+
+## 2026-07-29 — 모바일 충전소 탭(히트테스트)
+
+### 한 일
+- `StationMarkers`: 반경 Circle이 Marker 탭을 가로채는 TMAP 이슈 → map DOM short-tap → 근처 55m 이내 충전소 `selectStation`.
+- selectedId 변경 시 마커 전체 재생성하지 않고 `setIcon`만. touchend/click 병행.
+
+### 결정
+- 시험주행(testMode) 중에는 히트테스트 스킵.
+
+### 다음
+- 실기기에서 마커 탭 재확인.
+
+---
+
+## 2026-07-29 — UI 폰트 Noto Sans KR
+
+### 한 일
+- `layout.tsx`: Manrope / Plus Jakarta Sans → `Noto_Sans_KR` (`--font-sans`, display=swap).
+- `globals.css`: `--font-display` = `--font-sans`. 마커 canvas도 Noto 우선.
+
+### 결정
+- TMAP 베이스맵 라벨 폰트는 변경하지 않음(SDK/타일).
+
+### 다음
+- (없음)
+
+---
+
+## 2026-07-29 — 완속 필터(includeSlow) 완성
+
+### 한 일
+- `mapStore.includeSlow` 기본 false(그외만). `filterStationsBySlowInclude`로 List/Markers 공통 필터.
+- `SlowChargeFilterFab`: 아이콘 토글 + 탭 시 「완속 포함/숨김」. MapView FAB 스택에 조합만.
+- 완속 끄면 선택 중이던 완속-only 충전소는 선택 해제.
+
+### 결정
+- 타입 미상(`chargerTypes` 없음)은 필터에서 숨기지 않음.
+
+### 다음
+- 실기기에서 토글·목록·마커 동기 확인.
+
+---
+
+## 2026-07-29 — 가용 합계(마커) + 버킷 분해(상세)
+
+### 한 일
+- BE stations: `availableCount`(전체) 유지 + `availableCountOther` / `availableCountSlow` 집계(완속 02/08, null 타입→other).
+- FE: 마커·리스트는 합계만. 상세 카드는 혼합소만 그외/완속 대기 분리 표기.
+- `stations_api.md` 필드 설명 갱신.
+
+### 결정
+- 완속 숨김 시 완속-only는 목록에서 제외되므로, 분해 UI는 혼합소에만 필요.
+- 마커 가시성 위해 혼합소도 합계 숫자 유지.
+
+### 다음
+- 혼합 충전소 탭 시 상세 숫자와 DB status 대조.
 
 ---
 
