@@ -65,6 +65,9 @@ def signup(
     nickname: str,
     address: str | None,
     detail_address: str | None,
+    user_lat: float | None,
+    user_lng: float | None,
+    email: str | None,
 ) -> User:
     """회원가입 — 중복 체크 + password 해시 저장."""
     try:
