@@ -56,6 +56,7 @@ def _station_row(row) -> dict:
             else None
         ),
         "charger_total": _nullable_int(row["charger_total"]),
+        "charger_total_other": _nullable_int(row["charger_total_other"]),
         "charger_types": _split_charger_types(row["charger_types"]),
         "source_mode": "LIVE",
     }
@@ -112,6 +113,16 @@ _AVAIL_SQL = """
                     END
                 )
             END AS available_count_slow
+"""
+
+# 총대수: 전체 + 그외(완속 02/08 제외, 타입 공란→other). 완속 총 = total − other
+_TOTAL_SQL = """
+            COUNT(DISTINCT i.chger_id) AS charger_total,
+
+            COUNT(DISTINCT CASE
+                WHEN IFNULL(i.chger_type, '') NOT IN ('02', '08')
+                THEN i.chger_id
+            END) AS charger_total_other
 """
 
 
@@ -171,7 +182,7 @@ def list_stations_near(
 
 {_AVAIL_SQL},
 
-            COUNT(DISTINCT i.chger_id) AS charger_total,
+{_TOTAL_SQL},
 
             GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types
 
@@ -239,7 +250,7 @@ def list_stations_viewport(
 
 {_AVAIL_SQL},
 
-            COUNT(DISTINCT i.chger_id) AS charger_total,
+{_TOTAL_SQL},
 
             GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types
 

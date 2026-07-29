@@ -13,8 +13,11 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     cors_origins: str = "http://localhost:3000"
-    # LAN mobile: allow any host in 172.30.1.0/24 (DHCP IP churn). Empty = disabled.
-    cors_origin_regex: str = r"http://172\.30\.1\.\d+:\d+"
+    # LAN phone: 172.30.1.* any port. Local FE: localhost/127.0.0.1 ports 3000–3009.
+    # Empty string disables regex allowlist.
+    cors_origin_regex: str = (
+        r"http://((localhost|127\.0\.0\.1):300[0-9]|172\.30\.1\.\d+:\d+)"
+    )
 
     db_host: str = "127.0.0.1"
     db_port: int = 3306
