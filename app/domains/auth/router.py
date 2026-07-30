@@ -1,5 +1,6 @@
 # HTTP 라우팅만 담당 — 본문은 controller
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -33,5 +34,36 @@ def me(user: User | None = Depends(get_current_user_optional)) -> MeResponse:
 
 
 @router.post("/logout")
-def logout():
-    return auth_controller.logout()
+def logout(response: Response):
+    # HttpOnly 쿠키 삭제 포함
+    return auth_controller.logout(response)
+
+
+# --- 소셜 OAuth (google | kakao | naver) — 리다이렉트 전용 ---
+
+
+@router.get("/{provider}/login", response_class=RedirectResponse)
+def oauth_login(
+    provider: str,
+    return_url: str | None = Query(None, alias="returnUrl"),
+) -> RedirectResponse:
+    """소셜 로그인 시작 — 제공자 authorize로 302."""
+    return auth_controller.oauth_login_redirect(provider, return_url)
+
+
+@router.get("/{provider}/callback", response_class=RedirectResponse)
+def oauth_callback(
+    provider: str,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db: Session | None = Depends(get_db),
+) -> RedirectResponse:
+    """소셜 콜백 — 회원 upsert + JWT 쿠키 → FE."""
+    return auth_controller.oauth_callback(
+        db,
+        provider,
+        code=code,
+        state=state,
+        error=error,
+    )

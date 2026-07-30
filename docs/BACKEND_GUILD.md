@@ -299,7 +299,7 @@ ORM: SQLAlchemy `models.py`가 테이블에 맞춘다. Prisma migrate 대신 **�
 
 ### 11단계: 의존성
 
-- 패키지 추가 시 `docs/규칙.md`를 따른다 (`requirements.txt` A-Z, `==` 고정, 충돌 마커 금지).
+- 패키지 추가 시 `docs/규칙.md`를 따른다 (`requirements.txt` **맨 아래 append**, `==` 고정, A-Z 재정렬 금지, 충돌 마커 금지).
 - `pip freeze`로 파일 전체를 덮어쓰지 말고 변경분만 반영한다.
 
 ## 6. GitHub 이슈 분리 예시

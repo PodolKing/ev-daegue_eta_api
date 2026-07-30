@@ -41,10 +41,32 @@ class Settings(BaseSettings):
     ev_status_num_of_rows: int = 9999
     # Soft cap (process memory). 5분×288≈일 + 여유. 개발계정 한도(~1000) 대비.
     ev_status_daily_call_limit: int = 400
-    # Local auth JWT (Kakao OAuth keys stay separate / later)
+    # Local auth JWT
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24  # 1 day
+
+    # 소셜 OAuth 콜백 후 FE 리다이렉트 기준 origin
+    frontend_origin: str = "http://localhost:3000"
+    # itsdangerous state 서명용 시크릿
+    oauth_state_secret: str = ""
+    # HttpOnly JWT 쿠키 이름
+    auth_cookie_name: str = "access_token"
+
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
+
+    # Kakao OAuth
+    kakao_client_id: str = ""
+    kakao_client_secret: str = ""
+    kakao_redirect_uri: str = "http://localhost:8000/api/v1/auth/kakao/callback"
+
+    # Naver OAuth
+    naver_client_id: str = ""
+    naver_client_secret: str = ""
+    naver_redirect_uri: str = "http://localhost:8000/api/v1/auth/naver/callback"
 
     @property
     def sqlalchemy_database_url(self) -> str:

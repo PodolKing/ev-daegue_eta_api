@@ -14,8 +14,7 @@ class SignupRequest(CamelModel):
     detail_address: str | None = None
     user_lat: float | None = None
     user_lng: float | None = None
-    email: str | None = None
-    
+    # email 필드 제거 (소셜은 provider/provider_id로 식별)
 
 
 class LoginRequest(CamelModel):
@@ -36,10 +35,10 @@ class UserPublic(CamelModel):
     detail_address: str | None = None
     created_at: datetime
     updated_at: datetime
-    social_provider: str | None = None  # 로컬은 null, 카카오 연동 시 사용
+    # 가입 경로: local | google | kakao | naver
+    provider: str = "local"
     user_lat: float | None = None
     user_lng: float | None = None
-    email: str | None = None
 
 
 class MeResponse(CamelModel):

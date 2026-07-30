@@ -999,10 +999,12 @@ PC 전용으로 되돌릴 때:
 ## 2026-07-28 — requirements.txt 충돌 방지 규칙
 
 ### 한 일
-- Agent/팀 규칙: `api/requirements.txt`는 **새 패키지 맨 아래 append**, 중간 삽입·전체 정렬 금지(conflict 방지). `.cursor/rules/api-files.mdc`, `docs/rules/03_conventions.md`.
+- Agent/팀 규칙: `requirements.txt`는 **새 패키지 맨 아래 append**, 중간 삽입·전체 A-Z 정렬 금지(conflict 방지).
+- 문서 단일화: `docs/규칙.md` + Cursor `.cursor/rules/requirements.txt.mdc` (구 `api/requirements.txt` / `docs/rules/03_conventions.md` 경로 폐기).
 
 ### 결정
 - 버전만 올릴 때는 해당 줄만 수정. BE 의존성 추가 시 requirements 동시 갱신.
+- A-Z 정렬 정책은 사용하지 않음 — append만.
 
 ### 다음
 - (없음)

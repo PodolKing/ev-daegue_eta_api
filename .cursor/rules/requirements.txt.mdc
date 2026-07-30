@@ -1,0 +1,15 @@
+---
+description: requirements.txt는 맨 아래 append만 (A-Z 재정렬 금지, Git 충돌 방지)
+globs: requirements.txt
+alwaysApply: false
+---
+
+# requirements.txt
+
+Follow `docs/규칙.md`.
+
+- Add new packages only by **appending** `name==version` at the **bottom** of `requirements.txt`.
+- Do **not** insert in the middle or re-sort A-Z.
+- Do **not** run `pip freeze > requirements.txt` (overwrites whole file).
+- Bump an existing package by editing **that line only**; do not move it.
+- Pin with `==`. No personal/dev-only packages in the shared file.
