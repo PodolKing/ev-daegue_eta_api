@@ -1318,6 +1318,20 @@ PC 전용으로 되돌릴 때:
 
 ---
 
+## 2026-07-29 — 메뉴·IconRail 아이콘 교체
+
+### 한 일
+- compact「메뉴」텍스트 필 → 사이드레일 글리프 FAB(열림=사각 X). 지도 FAB 사이즈와 통일.
+- IconRail: 핀·북마크·P카드·슬라이더 + 충전기 마크(번개 제거). 활성 인디케이터 각진 바.
+
+### 결정
+- 기본 Lucide식(접힌지도·별·$·방사 톱니·번개)에서 제품 톤으로 단순화.
+
+### 다음
+- 폰에서 메뉴 토글·레일 아이콘 가독성 확인.
+
+---
+
 ## 기록 규칙
 
 1. 날짜 헤더(`## YYYY-MM-DD — 제목`)로 추가.
@@ -1325,3 +1339,162 @@ PC 전용으로 되돌릴 때:
 3. Agent가 의미 있는 구현을 마치면 이 파일에 한 블록 append.
 4. Git 올릴 때 `web/docs/teamdeveloper.md`, `api/docs/teamdeveloper.md` 동기화.
 5. 새 블록 추가 시 위 **요약** 표도 최신화. 온보딩 섹션이 바뀌면 상단도 함께 수정.
+
+## 2026-07-29 — 모바일 충전소 마커 탭 성능 최적화
+
+### 한 일
+- `StationMarkers.tsx`: `buildCircleIconUrl` 결과를 `label|fill|selected` 키로 모듈 레벨 Map 캐시 추가 → 동일 상태 마커 반복 canvas 생성 제거
+- `StationMarkers.tsx`: `selectedId` 변경 시 전체 마커 순회 대신 이전 선택 마커 + 새 선택 마커 **2개만** 아이콘 업데이트 (`prevSelectedIdRef` 추가)
+- `mapStore.ts`: `selectStation`에서 `mobileListOpen`이 이미 닫혀있을 때 불필요한 `map.resize()` 호출 제거 → 시트가 열려있었을 때만 resize
+
+### 결정
+- 캐시는 모듈 생명주기 동안 유지 (앱 새로고침 시 초기화). 마커 종류 수가 적어 메모리 문제 없음.
+- `includeSlow` 변경 시에는 전체 목록 변경이므로 기존 `[map, visible]` effect가 전체 재생성 → 문제 없음.
+
+### 다음
+- 마커 탭 반응성 추가 개선 여지 있음 (TMAP screenToReal 좌표 오차)
+
+## 2026-07-30 — 모바일 목록 시트 3단 + 헤더 압축
+
+### 한 일
+- `mapStore`: `mobileListOpen` → `mobileSheetSnap` (`peek` | `half` | `full`). `setMobileListOpen`은 half/peek 호환 유지.
+- `AppShell`: 시트 높이 `2.75rem` / `42dvh` / `90dvh`. 핸들 탭 순환, 스와이프 up/down 한 단계.
+- `StationList`: 모바일 `compactHeader` — Nearby 제거, 한 줄 제목+메타. 사이드 패널도 헤더 약간 축소.
+
+### 결정
+- 큰 기종에서도 42dvh+큰 헤더면 2칸만 보여 답답 → 최대화(90dvh) + 헤더 압축.
+- 선택 시 snap → peek (기존 접기와 동일 의도).
+
+### 다음
+- 실기기에서 half/full 체감·FAB offset 확인. 위치 모드(현위치 setFollow 등)는 별도.
+
+## 2026-07-30 — 목록 시트 스와이프 (dragEnd 방식)
+
+### 한 일
+- 최소|중간|최대 세그먼트 제거. 탭=peek↔half 토글, full은 스와이프.
+- 제스처: move 중 즉시 snap 금지 → pointerup에서 offset(50) + velocity(400px/s)로 판정 (병원 MobileBottomSheet/framer 참고).
+- `setPointerCapture` + `touch-none`으로 핸들 밖에서도 드래그 유지.
+
+### 결정
+- framer-motion 미도입(의존성 추가 보류). 동일 dragEnd 로직만 이식.
+- 사용자 UX: 토글 + 스와이프가 세그먼트보다 자연스러움.
+
+### 다음
+- 실기기에서 스와이프 감도 확인. 필요 시 framer drag 도입.
+
+## 2026-07-30 — 목록 시트 드래그 따라가기 (transform)
+
+### 한 일
+- `MobileStationSheet`: height 애니메이션 제거 → `translate3d` + 드래그 중 손가락 추종, 놓으면 340ms ease snap.
+- FAB offset은 드래그 중에도 `--map-sheet-offset` px로 갱신.
+
+### 결정
+- 끊김 원인 = 놓을 때만 높이 점프. 병원 framer 시트와 같이 드래그 중 시각 피드백 필요.
+
+### 다음
+- 체감 부족 시 framer-motion spring 검토.
+
+## 2026-07-30 — 모바일 가이드 `mobile.md` (로컬)
+
+### 한 일
+- 워크스페이스 상위 `mobile.md` 추가: compact·바텀시트 snap·줌·FAB·Circle·파일 인덱스 (git 밖).
+
+### 결정
+- 모바일 전용 설정은 `mapguides`와 분리해 `mobile.md`에 모은다.
+
+### 다음
+- (없음)
+
+## 2026-07-30 — IconRail 내 차량 메뉴(UI)
+
+### 한 일
+- `IconRail`: 설정 위에 「내 차량」 네비 항목 추가(아이콘만, 화면/API 미연동).
+
+### 결정
+- 설정은 유지. 차량 등록·포트 필터 진입은 이후 「내 차량」에 연결.
+
+### 다음
+- 차량 등록 UI·cars API·포트 기반 충전소 필터.
+
+## 2026-07-30 — FE `Car` / `CarModel` 타입
+
+### 한 일
+- `web/src/types/car.ts`: `cars` DDL에 맞춘 camelCase 타입 (`ChargingPort`, `Car`, `CarModel`).
+
+### 결정
+- id는 auth와 같이 string. 유효 포트 = `chargingPort ?? carModel.chargingPort`.
+
+### 다음
+- `carStore`·`CarPanel` 연동.
+
+## 2026-07-30 — carStore / CarPanel 껍질
+
+### 한 일
+- `carStore`: cars·primaryCar·`filterByCarPort`(기본 true)·`effectiveChargingPort`.
+- `CarPanel`: 빈 상태 + 포트 필터 토글 UI (레일 연결 전).
+
+### 결정
+- persist 미사용(mapStore와 동일). API 연동 전 로컬 state만.
+
+### 다음
+- IconRail `car` 탭 → AppShell 패널에 CarPanel 표시.
+
+## 2026-07-30 — IconRail ↔ 사이드 패널 네비 연결
+
+### 한 일
+- `NavId`를 `car`로 통일·export. `IconRail`에 `onSelect` + 클릭 핸들러.
+- `AppShell`: `activeNav` 로컬 state로 `StationList` / `CarPanel` / `UnimplementedHint` 분기. `listPanelOpen` 재사용.
+
+### 결정
+- 패널 open은 store가 아니라 AppShell. 모바일 시트 연동은 후속.
+
+### 다음
+- 모바일에서 car 패널 표시. CarRegisterSheet·포트 필터 연동.
+
+## 2026-07-30 — 차량 포트 ↔ chgerType 매핑
+
+### 한 일
+- `chargerTypes.ts`: `PORT_TO_CHGER_TYPE_CODES` (CCS1/CHADEMO/NACS) + `chgerCodesForChargingPort` + `stationMatchesCarPort`.
+
+### 결정
+- 어댑터 없음: NACS=09/10만, CCS에 09 미포함. 미분류/포트 없음은 통과.
+- `ChargerTypeBucket`(완속)과 축 분리.
+
+### 다음
+- List/Markers에 포트 필터 적용 + CarPanel 임시 토글.
+
+## 2026-07-30 — CarPanel 임시 포트 버튼
+
+### 한 일
+- `CarPanel`: CCS/CHAdeMO/NACS 버튼 → `buildTempCar` 후 `setCars` + 필터 ON. 지우기·기존 토글 유지.
+
+### 결정
+- 등록 API 전: 패널에서만 가짜 `Car`를 store에 넣음. DB 조회 없음.
+
+### 다음
+- StationMarkers visible에 포트 필터 맞추기(List는 연결됨). 실기 확인.
+
+## 2026-07-30 — 포트 필터 빈 결과 안내
+
+### 한 일
+- `StationList`: 내 차 포트 필터로 0건일 때 안내 + 「전체 보기」. NACS는 “매우 적음” 문구(숫자 고정보다 정성).
+- `CarPanel`: NACS 선택 시 시내·공공 NACS 희소 안내.
+
+### 결정
+- DB 건수(예: 5개)를 UI에 하드코딩하지 않음 — 수집·지역 변동에 바로 거짓이 됨.
+
+### 다음
+- (선택) 지도 칩·등록 UI에도 동일 카피 재사용.
+
+## 2026-07-30 — 모바일 시트에 네비 패널 연결
+
+### 한 일
+- 모바일(`md` 미만) 사이드 패널은 원래 `hidden` — CarPanel이 안 보이던 것.
+- `MobileStationSheet`에 `activeNav` 전달: 지도=StationList, 내 차량=CarPanel 등.
+- 레일에서 항목 선택 시 시트를 `half`로 펼침.
+
+### 결정
+- 데스크톱=왼쪽 패널 교체, 모바일=하단 시트 내용 교체 (지도는 유지).
+
+### 다음
+- 실기기에서 메뉴 FAB → 내 차량 → 포트 필터 확인.
