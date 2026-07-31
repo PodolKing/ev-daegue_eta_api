@@ -1,9 +1,10 @@
 # EV SafeCharge 백엔드 작업 가이드 (FastAPI)
 
+> **등급: S2 해설** — 워크스페이스 S0(`docs/rules`, `important`, 합의)과 충돌하면 **S0 우선**.  
 > 대상: 백엔드 담당  
 > 기술 스택: **Python 3.11+ · FastAPI · Uvicorn · SQLAlchemy 2 · Pydantic v2 · MariaDB/MySQL (PyMySQL)**  
-> 원본: `docs/02_BACKEND_GUIDE.md`(Express + TypeScript + Prisma) → FastAPI 프로젝트에 맞게 재작성  
-> 응답 필드: **camelCase** (`CamelModel`)
+> 응답 필드: **camelCase** (`CamelModel`)  
+> **`02_BACKEND_GUIDE.md` = OBSOLETE** (Express 초안). 일상 작업은 **본 문서만**.
 
 ## 1. 이번 작업의 목표
 
@@ -390,4 +391,4 @@ Content-Type: application/json
 | `DATA_MODE=mock` | DB 미설정 시 빈 목록 등 (도메인별) |
 | Swagger 수동 | FastAPI `/docs` 자동 |
 
-`02_BACKEND_GUIDE.md`는 초기 Express 가정용으로 남겨 두고, **일상 작업은 본 문서(`BACKEND_GUILD.md`)를 따른다.**
+`02_BACKEND_GUIDE.md`는 **OBSOLETE(폐기)**. 열지 말고 본 문서·`stations_api.md`·`규칙.md`만 쓴다.

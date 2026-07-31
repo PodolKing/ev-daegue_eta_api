@@ -30,6 +30,35 @@ VALID_STATUS = frozenset({"1", "2", "3", "4", "5", "9"})
 _scheduler: AsyncIOScheduler | None = None
 _daily_calls = 0
 _daily_calls_date: date | None = None
+_sync_logging_configured = False
+
+
+def _ensure_sync_logging() -> None:
+    """status sync 로그에 KST 시각을 통일해 붙인다 (메시지별 datetime 금지)."""
+    global _sync_logging_configured
+    if _sync_logging_configured:
+        return
+    # uvicorn --reload 시 모듈만 재실행되고 Logger 인스턴스(handlers)는 유지됨
+    for existing in logger.handlers:
+        if getattr(existing, "_ev_status_sync", False):
+            _sync_logging_configured = True
+            return
+
+    handler = logging.StreamHandler()
+    handler._ev_status_sync = True  # type: ignore[attr-defined]
+    formatter = logging.Formatter(
+        fmt="%(asctime)s %(levelname)s [status-sync] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    formatter.converter = lambda secs: datetime.fromtimestamp(secs, KST).timetuple()
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    _sync_logging_configured = True
+
+
+_ensure_sync_logging()
 
 
 def _today_kst() -> date:
