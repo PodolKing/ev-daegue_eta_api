@@ -15,9 +15,11 @@ from app.domains.stations import sync as stations_sync
 from app.domains.stations.router import router as stations_router
 from app.domains.traffic.router import router as traffic_router
 from app.domains.weather.router import router as weather_router
+from app.domains.stations.sync import _ensure_sync_logging
+from app.domains.routes.router import router as routes_router
 
 settings = get_settings()
-
+_ensure_sync_logging()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -58,5 +60,6 @@ app.include_router(traffic_router)
 app.include_router(parking_router)
 app.include_router(weather_router)
 app.include_router(places_router)
+app.include_router(routes_router)
 app.include_router(history_router)
 app.include_router(admin_router)

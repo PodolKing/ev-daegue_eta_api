@@ -1,8 +1,25 @@
-# EV SafeCharge 백엔드 작업 가이드
+# OBSOLETE — 사용하지 말 것
 
-> 대상: 백엔드 담당 1명  
-> 기술 예시: Express + TypeScript + Prisma  
-> 현재 단계: 공공데이터 원본을 바로 완벽하게 DB화하기보다 목데이터로 API 계약과 서버 흐름을 먼저 완성
+> **상태: 폐기 (2026-07-31)**  
+> 이 문서는 초기 **Express + TypeScript + Prisma + 목데이터** 가정용 초안이다.  
+> **현재 스택·계약과 충돌한다.** Agent·신규 개발자는 **읽지 말고** 아래만 따른다.
+>
+> | 우선순위 | 문서 |
+> |----------|------|
+> | S0 정본 | 워크스페이스 `docs/rules/*`, `docs/important.md`, 합의사항 |
+> | BE 일상 가이드 | **[`BACKEND_GUILD.md`](./BACKEND_GUILD.md)** (FastAPI) |
+> | requirements 충돌 방지 | [`규칙.md`](./규칙.md) |
+> | stations 계약 | [`stations_api.md`](./stations_api.md) |
+>
+> 아래 본문은 **역사 보관용**이다. 구현·리뷰·Agent 지시의 근거로 쓰지 말 것.
+
+---
+
+# (보관) EV SafeCharge 백엔드 작업 가이드 — Express 초안
+
+> ~~대상: 백엔드 담당 1명~~  
+> ~~기술 예시: Express + TypeScript + Prisma~~  
+> **폐기됨.** 현재는 FastAPI · SQLAlchemy · 실DB stations.
 
 ## 1. 이번 작업의 목표
 
