@@ -1613,3 +1613,144 @@ outeStore: 도착지 preview · startDirections(출발=현위치). FEATURES.tmap
 
 ### 다음
 - 실기기에서 검색 열기·키보드·닫기 동선 확인.
+
+## 2026-07-31 — StationDetailCard ETA + 길찾기 모드 레이아웃
+
+### 한 일
+- StationDetailCard: routeStore distanceM/durationSec/status 연동. 이 충전소 길찾기 시 ETA(분·경로 km) 표시.
+- 길찾기 모드(loading/ready/error): 카드 패딩·min-height 확장, 충전기 타입/직선 km 대신 정사각 ETA 타일 2칸. 버튼 「다시 길찾기」.
+- PlaceSummaryBar: ETA 문구·loading 정리, unimplemented hint 복구. 깨진 WIP import 제거.
+
+### 결정
+- 카드 전체 aspect-square 강제 대신, 길찾기 모드에서 ETA 타일만 aspect-square + 카드 한 단 확장 (모바일·웹 공통). 지도 가림 최소화.
+
+### 다음
+- 실시간 재경로 throttle (자유주행 ON 후 위치 이동 시 km·분·선 갱신).
+
+## 2026-07-31 — 충전소 선택 시 활성 길찾기 유지
+
+### 한 일
+- mapStore.selectStation: status가 loading/ready일 때 clearDestination 호출 안 함 (경로·ETA·폴리라인 유지).
+- preview/idle/error일 때만 장소검색 요약 destination 정리 (상세와 상호배타).
+
+### 결정
+- 자유주행 중 TMAP Marker click은 그대로 동작(DOM nearest-hit만 testMode 가드). 충전소 탭 ≠ 길찾기 해제.
+- 길찾기 해제는 × / clearDestination 명시 동작에만.
+
+### 다음
+- 실시간 재경로 throttle.
+
+## 2026-07-31 — 경로 취소 버튼
+
+### 한 일
+- StationDetailCard: 길찾기 모드에 「경로 취소」+「다시 길찾기」. 다른 충전소 열람 중에도 활성 경로면 「경로 중 · 이름 / 경로 취소」 스트립.
+- PlaceSummaryBar: loading/ready 시 「경로 취소」 버튼. ×도 clearDestination.
+
+### 결정
+- 길찾기 해제는 명시적 취소만 (충전소 탭으로는 안 지움).
+
+### 다음
+- 실시간 재경로 throttle.
+
+## 2026-07-31 — 자유주행 탭 시 현위치 마커 고정 수정
+
+### 한 일
+- MapView: coords→현위치 Marker 이펙트에서 isMapGestureActive 가드 제거. 탭 중 setTestCoords 후에도 setPosition 반영.
+- createMap / SDK 로드 / RadiusControl 카메라·원 가드는 변경 없음 (카메라 chase만 제스처 중 스킵 유지).
+
+### 결정
+- 마커 setPosition은 팬 전투 대상이 아님. 제스처 hold(~450ms) 동안 스킵하면 coords가 안 바뀌어 마커가 영구 고정됨 → 주행테스트 체감 저하.
+
+### 다음
+- 자유주행 ON → 지도 탭 → 마커 이동 확인. 이후 재경로 throttle.
+
+## 2026-07-31 — 실시간 재경로 throttle
+
+### 한 일
+- routeStore: maybeRefreshRoute — status=ready일 때 현위치 기준 **150m 또는 4초**(미만은 trailing). silent refresh(구 path/ETA 유지, 실패 시 유지).
+- RouteLiveRefresh: coords 구독 → maybeRefreshRoute. MapView는 조합만.
+- startDirections는 기존처럼 loading UI. clearDestination 시 in-flight 무효화.
+
+### 결정
+- stations throttle(200m/4초)과 유사, 주행테스트 체감용 150m. 수치 실차 후 조정 가능.
+- 1단계 길찾기(출발=현위치·폴리라인·ETA·취소·자유주행 연동 throttle) 골격 완료. 턴바이턴/음성/이탈 재탐색 UX는 이후.
+
+### 다음
+- 자유주행 ON → 길찾기 → 탭 이동 → km·분·선 갱신 확인.
+
+## 2026-07-31 — mapguides.md 길찾기 1단계 반영
+
+### 한 일
+- 루트 mapguides.md: routeStore·ETA·Polyline·LiveRefresh throttle·경로 취소·selectStation 유지·마커 제스처 가드 수정·시나리오 G–I 갱신.
+
+### 결정
+- S2 해설은 mapguides.md 단일. mapguide.md는 리다이렉트 유지.
+
+### 다음
+- 실기기에서 자유주행+재경로 체감 확인.
+
+## 2026-08-03 — 자유주행 중 충전소 선택 잠금 + 길찾기 UI 유지
+
+### 한 일
+- 자유주행(testMode) ON: selectStation / Marker click / 목록 행으로 충전소 선택 불가(활성 경로 목적지 복원만 예외).
+- StationDetailCard: 다른 충전소 열람 시 「경로 중」 스트립에 펼치기(목적지 선택 복원).
+- PlaceSummaryBar: 길찾기 loading/ready일 때 StationDetailCard와 같은 ETA 타일 레이아웃 유지(카드 × 후에도 안 줄어듦).
+
+### 결정
+- 자유주행 핵심 제스처=맵 탭 위치 지정. 충전소·상세 선택은 충돌 원인이라 잠금. 반경/OFF/지도 팬·핀치는 유지.
+- 길찾기 축소 체감은 (1) 타 충전소 탭 → 경로 중 스트립 (2) 상세 × → 얇은 요약바. 스트립 펼치기 + 요약바 ETA 확장으로 대응.
+
+### 다음
+- 실기기에서 자유주행+길찾기 탭 이동 시 충전소 안 열림·ETA 유지 확인.
+
+## 2026-08-03 — 자유주행: 목록 선택은 유지 (마커만 잠금)
+
+### 한 일
+- selectStation / StationList 잠금 롤백. 자유주행 중에도 목록·시트로 충전소 선택·길찾기 가능.
+- 맵 Marker click / nearest-hit만 testMode에서 무시 (맵 탭=가짜 현위치 충돌 방지).
+- 길찾기 ETA 유지·「경로 중 펼치기」는 그대로.
+
+### 결정
+- 잠글 대상은 지도 위 마커 탭뿐. 리스트는 의도적 선택이므로 연다.
+
+### 다음
+- 자유주행: 목록으로 목적지 → 길찾기 → 맵 탭 이동 시나리오 확인.
+
+## 2026-08-03 — 길찾기 중 버튼 카피: 경로 취소 → 안내종료
+
+### 한 일
+- StationDetailCard / PlaceSummaryBar: 활성 경로(loading·ready) 종료 CTA를 「안내종료」로 통일.
+
+### 결정
+- ETA 1분 이하 등 조건부 문구는 안 씀(0분 반올림·짧은 km에서만 바뀌면 체감 차이 없고 기준만 복잡). 안내 중엔 항상 안내종료.
+
+### 다음
+- 없음(카피만).
+
+## 2026-08-03 — 현위치/도착 마커 형태 구분
+
+### 한 일
+- lib/tmap/roleMarkers.ts: 현위치=파란 GPS 원, 도착=빨간 핀(SVG data URL + MarkerImage).
+- MapView 현위치 Marker·PlaceSummaryBar 검색 도착 Marker에 적용. loadSdk/createMap/RadiusControl 미변경.
+
+### 결정
+- 색만 다른 핀보다 원 vs 핀이 출발/도착 구분에 유리. 충전소 길찾기는 기존 충전소 마커 유지(검색 도착 핀만 변경).
+
+### 다음
+- 길찾기 중 충전소 목적지에 도착 핀 오버레이가 필요하면 별도.
+
+## 2026-08-03 — ev_charger_info 고정 컬럼 확장 / output_now 정리
+
+### 한 일
+- `EvChargerInfo` ORM에 getChargerInfo 고정 필드 풀세트 반영 (`output`, `busi_nm`, `use_time`, `parking_free` 등).
+- `EvChargerStatus`에서 `output_now` 제거. status sync는 `charger_status` + `last_updated`만 upsert.
+- 합의 문서 §5·backendguide 테이블 요약 갱신.
+
+### 결정
+- 저장은 info 풀세트, API/화면은 필요한 컬럼만 노출.
+- 정격 출력(kW) = `ev_charger_info.output`. status의 `output_now`는 의미상 스펙이라 폐기.
+- 충전요금(원/kWh)은 원본 API에 없음 — 스키마에 넣지 않음.
+
+### 다음
+- DB에 ALTER로 info 컬럼 추가 + (선택) `output_now` DROP. 기존 DB에 `year`만 있으면 `install_year`와 매핑 확인.
+- info 적재/보강 시 `output` 등 채우기. 상세 API에서 쓸 필드만 SELECT.

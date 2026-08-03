@@ -133,19 +133,11 @@ def _normalize_row(item: dict[str, Any]) -> dict[str, Any] | None:
     status = str(raw_stat).strip() if raw_stat is not None else ""
     charger_status = status if status in VALID_STATUS else None
 
-    output_raw = item.get("output")
-    output_now = None
-    if output_raw is not None and str(output_raw).strip() != "":
-        try:
-            output_now = float(output_raw)
-        except (TypeError, ValueError):
-            output_now = None
-
+    # output(kW)은 고정값 → ev_charger_info.output. status에는 상태만.
     return {
         "stat_id": str(stat_id),
         "chger_id": str(chger_id),
         "charger_status": charger_status,
-        "output_now": output_now,
         "last_updated": datetime.now(),
     }
 
@@ -212,7 +204,6 @@ def _upsert_rows(rows: list[dict[str, Any]]) -> int:
             stmt = insert(EvChargerStatus).values(chunk)
             stmt = stmt.on_duplicate_key_update(
                 charger_status=stmt.inserted.charger_status,
-                output_now=stmt.inserted.output_now,
                 last_updated=stmt.inserted.last_updated,
             )
             db.execute(stmt)
