@@ -1754,3 +1754,16 @@ outeStore: 도착지 preview · startDirections(출발=현위치). FEATURES.tmap
 ### 다음
 - DB에 ALTER로 info 컬럼 추가 + (선택) `output_now` DROP. 기존 DB에 `year`만 있으면 `install_year`와 매핑 확인.
 - info 적재/보강 시 `output` 등 채우기. 상세 API에서 쓸 필드만 SELECT.
+
+## 2026-08-03 — 길찾기 시 Directions 카드 유지
+
+### 한 일
+- routeStore startDirections: 시트 peek + 목적지 stationId면 selectedId 복원(없으면 null → PlaceSummaryBar).
+- StationDetailCard ×: 경로 중(loading/ready)에는 목록 half를 열지 않고 peek만 — 요약바 Directions 카드가 가려지지 않게.
+
+### 결정
+- 자유주행(찍은 출발) + 길찾기는 막지 않음. 카드만 항상 보이게 해서 같은 흐름을 씀.
+- 출발=locationStore.coords(실GPS·시험좌표 공통).
+
+### 다음
+- 실기기: 자유주행 탭 → 목록/검색 목적지 → 길찾기 → ETA 카드 유지·× 후 요약바 확인.

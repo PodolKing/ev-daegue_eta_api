@@ -40,6 +40,19 @@ def _split_charger_types(value: object) -> list[str]:
     return [part for part in text_value.split(",") if part]
 
 
+def _nullable_float(value: object) -> float | None:
+    if value is None:
+        return None
+    return _as_float(value)
+
+
+def _nullable_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text_value = str(value).strip()
+    return text_value or None
+
+
 def _station_row(row) -> dict:
     return {
         "station_id": row["station_id"],
@@ -58,6 +71,14 @@ def _station_row(row) -> dict:
         "charger_total": _nullable_int(row["charger_total"]),
         "charger_total_other": _nullable_int(row["charger_total_other"]),
         "charger_types": _split_charger_types(row["charger_types"]),
+        "use_time": _nullable_str(row.get("use_time")),
+        "busi_nm": _nullable_str(row.get("busi_nm")),
+        "busi_call": _nullable_str(row.get("busi_call")),
+        "output_min": _nullable_float(row.get("output_min")),
+        "output_max": _nullable_float(row.get("output_max")),
+        "limit_detail": _nullable_str(row.get("limit_detail")),
+        "traffic_yn": _nullable_str(row.get("traffic_yn")),
+        "parking_free": _nullable_str(row.get("parking_free")),
         "source_mode": "LIVE",
     }
 
@@ -163,6 +184,14 @@ def list_stations_near(
             MAX(i.addr) AS address,
             MAX(i.lat) AS lat,
             MAX(i.lng) AS lng,
+            MAX(i.use_time) AS use_time,
+            MAX(i.busi_nm) AS busi_nm,
+            MAX(i.busi_call) AS busi_call,
+            MIN(i.output) AS output_min,
+            MAX(i.output) AS output_max,
+            MAX(i.limit_detail) AS limit_detail,
+            MAX(i.traffic_yn) AS traffic_yn,
+            MAX(i.parking_free) AS parking_free,
 
             (
                 6371 * ACOS(
@@ -247,6 +276,14 @@ def list_stations_viewport(
             MAX(i.addr) AS address,
             MAX(i.lat) AS lat,
             MAX(i.lng) AS lng,
+            MAX(i.use_time) AS use_time,
+            MAX(i.busi_nm) AS busi_nm,
+            MAX(i.busi_call) AS busi_call,
+            MIN(i.output) AS output_min,
+            MAX(i.output) AS output_max,
+            MAX(i.limit_detail) AS limit_detail,
+            MAX(i.traffic_yn) AS traffic_yn,
+            MAX(i.parking_free) AS parking_free,
 
 {_AVAIL_SQL},
 

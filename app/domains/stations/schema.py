@@ -14,6 +14,14 @@ class StationItem(CamelModel):
     charger_total: int | None = None
     charger_total_other: int | None = None
     charger_types: list[str] = []
+    use_time: str | None = None
+    busi_nm: str | None = None
+    busi_call: str | None = None
+    output_min: float | None = None
+    output_max: float | None = None
+    limit_detail: str | None = None
+    traffic_yn: str | None = None
+    parking_free: str | None = None
     source_mode: str = "LIVE"
 
 
