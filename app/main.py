@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.domains.admin.router import router as admin_router
 from app.domains.auth.router import router as auth_router
+from app.domains.cars.router import router as cars_router
 from app.domains.history.router import router as history_router
 from app.domains.parking.router import router as parking_router
 from app.domains.places.router import router as places_router
@@ -54,6 +55,7 @@ def health():
 
 app.include_router(stations_router)
 app.include_router(auth_router)
+app.include_router(cars_router)  # 내 차량 조회·등록·소프트 삭제
 app.include_router(points_router)
 app.include_router(recommendations_router)
 app.include_router(traffic_router)

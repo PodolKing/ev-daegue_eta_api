@@ -93,32 +93,3 @@ class ChargingPort(str, enum.Enum):
     CCS1 = "CCS1"
     NACS = "NACS"
     CHADEMO = "CHADEMO"
-
-
-class CarModel(Base):
-    __tablename__ = "car_models"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    manufacturer = Column(String(50), nullable=False)
-    model_name = Column(String(50), nullable=False)
-    fuel_type = Column(Enum(FuelType), nullable=False)
-    charging_port = Column(Enum(ChargingPort), nullable=True)
-    battery_capacity = Column(Numeric(5, 2), nullable=True)
-    created_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False)
-
-
-class Car(Base):
-    __tablename__ = "cars"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(
-        BigInteger,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    car_model_id = Column(BigInteger, ForeignKey("car_models.id"), nullable=True)
-    nickname = Column(String(30), nullable=True)
-    created_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False)
-    custom_model_name = Column(String(50), nullable=True)
