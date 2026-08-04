@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     tmap_app_key: str = ""
     data_go_kr_key: str = ""
 
+    # 추천 모델 API (외부 서버 — X-API-Key)
+    recommend_api_base_url: str = "http://3.39.251.72:8000"
+    recommend_api_timeout: float = 10.0
+    recommend_api_key: str = ""
+
     # EvCharger status collector (see domains/stations/sync.py)
     # Base e.g. https://apis.data.go.kr/B552584/EvCharger  (getChargerStatus appended)
     ev_charger_api_url: str = ""
