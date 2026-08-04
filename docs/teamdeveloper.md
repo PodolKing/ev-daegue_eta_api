@@ -1951,3 +1951,17 @@ unSearch는 useMapStore.getState().center + useCallback([], [])로 center deps �
 
 ### 다음
 - recommendations 라우터 프록시 + CamelModel 스키마 (가이드 §4).
+
+## 2026-08-04 — FE AI 추천 목록·마커 (길찾기 전)
+
+### 한 일
+- recommendStore + fetchRecommendations 연동.
+- PlaceSummaryBar「AI 추천」: 도착지 기준 점수 조회 (주변 stations 조회 없음).
+- RecommendStationPanel 점수순 목록 → 선택 후 길찾기.
+- RecommendMarkers: 추천 결과만 지도 마커. AI 모드 중 StationMarkers 숨김.
+
+### 결정
+- 빨간 도착 마커는 추천 중심. 길찾기 출발=현위치, 도착=고른 추천 충전소.
+
+### 다음
+- 실기기: 검색→AI 추천→목록/마커→길찾기 확인.
