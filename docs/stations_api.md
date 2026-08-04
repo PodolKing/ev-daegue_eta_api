@@ -13,6 +13,8 @@ Distance is **DB Haversine** (bbox → filter → sort). Not TMAP route distance
 
 ## Response (camelCase body)
 
+Top-level item = **station** (`stat_id` aggregate). Nested `chargers[]` = **one row per charger** (info + status).
+
 ```json
 {
   "items": [
@@ -29,6 +31,42 @@ Distance is **DB Haversine** (bbox → filter → sort). Not TMAP route distance
       "chargerTotal": 4,
       "chargerTotalOther": 3,
       "chargerTypes": ["02", "04"],
+      "chargers": [
+        {
+          "chgerId": "01",
+          "statNm": "대구시청 공영주차장",
+          "chgerType": "04",
+          "addr": "대구광역시 …",
+          "addrDetail": null,
+          "location": "B1",
+          "lat": 35.8714,
+          "lng": 128.6014,
+          "useTime": "24시간",
+          "busiId": "ME",
+          "bnm": "환경부",
+          "busiNm": "환경부",
+          "busiCall": "1661-9408",
+          "output": 50,
+          "method": "단독",
+          "zcode": "27",
+          "zscode": "27110",
+          "kind": "A0",
+          "kindDetail": null,
+          "parkingFree": "Y",
+          "note": null,
+          "limitYn": "N",
+          "limitDetail": null,
+          "delYn": "N",
+          "delDetail": null,
+          "trafficYn": "N",
+          "installYear": "2020",
+          "floorNum": "B1",
+          "floorType": "지하",
+          "infoUpdatedAt": "2026-07-01T00:00:00",
+          "chargerStatus": "2",
+          "lastUpdated": "2026-08-04T12:00:00"
+        }
+      ],
       "sourceMode": "LIVE"
     }
   ],
@@ -38,9 +76,18 @@ Distance is **DB Haversine** (bbox → filter → sort). Not TMAP route distance
 }
 ```
 
+### `chargers[]`
+
+| Field | Source |
+|---|---|
+| `chgerId` … `infoUpdatedAt` | `ev_charger_info` (row columns; `infoUpdatedAt` ← `updated_at`) |
+| `chargerStatus`, `lastUpdated` | `ev_charger_status` |
+
+`stat_id`는 상위 `stationId`와 동일하므로 중첩에 중복하지 않음.
+
 ## Rules (do not change)
 
-- Aggregate by `stat_id` (station), not charger row.
+- Aggregate by `stat_id` (station), not charger row (top-level item).
 - `availableCount`: all chargers with `charger_status = '2'` (충전대기) — **합계** (마커·리스트용).
 - `availableCountOther` / `availableCountSlow`: same rule scoped by `chgerType` (slow = `02`/`08`; other = not slow, null type → other). Detail breakdown only.
 - `chargerTotal`: all chargers at station. `chargerTotalOther`: non-slow only (same type rule). No `chargerTotalSlow` — derive as `total − other` if needed.

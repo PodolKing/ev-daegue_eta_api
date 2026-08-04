@@ -1,3 +1,4 @@
+import json
 import math
 from decimal import Decimal
 
@@ -40,6 +41,144 @@ def _split_charger_types(value: object) -> list[str]:
     return [part for part in text_value.split(",") if part]
 
 
+def _json_get(item: dict, snake: str, camel: str) -> object:
+    if snake in item:
+        return item[snake]
+    if camel in item:
+        return item[camel]
+    return None
+
+
+def _parse_chargers(value: object) -> list[dict]:
+    """JSON_ARRAYAGG(JSON_OBJECT(...)) → ChargerItem dict list (snake_case)."""
+    if value is None:
+        return []
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode("utf-8")
+    if isinstance(value, str):
+        text_value = value.strip()
+        if not text_value:
+            return []
+        try:
+            value = json.loads(text_value)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(value, list):
+        return []
+
+    out: list[dict] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        chger_id = _json_get(item, "chger_id", "chgerId")
+        if chger_id is None or str(chger_id).strip() == "":
+            continue
+        out.append(
+            {
+                "chger_id": str(chger_id),
+                "stat_nm": _nullable_str(_json_get(item, "stat_nm", "statNm")),
+                "chger_type": _nullable_str(
+                    _json_get(item, "chger_type", "chgerType")
+                ),
+                "addr": _nullable_str(_json_get(item, "addr", "addr")),
+                "addr_detail": _nullable_str(
+                    _json_get(item, "addr_detail", "addrDetail")
+                ),
+                "location": _nullable_str(_json_get(item, "location", "location")),
+                "lat": _nullable_float(_json_get(item, "lat", "lat")),
+                "lng": _nullable_float(_json_get(item, "lng", "lng")),
+                "use_time": _nullable_str(_json_get(item, "use_time", "useTime")),
+                "busi_id": _nullable_str(_json_get(item, "busi_id", "busiId")),
+                "bnm": _nullable_str(_json_get(item, "bnm", "bnm")),
+                "busi_nm": _nullable_str(_json_get(item, "busi_nm", "busiNm")),
+                "busi_call": _nullable_str(_json_get(item, "busi_call", "busiCall")),
+                "output": _nullable_float(_json_get(item, "output", "output")),
+                "method": _nullable_str(_json_get(item, "method", "method")),
+                "zcode": _nullable_str(_json_get(item, "zcode", "zcode")),
+                "zscode": _nullable_str(_json_get(item, "zscode", "zscode")),
+                "kind": _nullable_str(_json_get(item, "kind", "kind")),
+                "kind_detail": _nullable_str(
+                    _json_get(item, "kind_detail", "kindDetail")
+                ),
+                "parking_free": _nullable_str(
+                    _json_get(item, "parking_free", "parkingFree")
+                ),
+                "note": _nullable_str(_json_get(item, "note", "note")),
+                "limit_yn": _nullable_str(_json_get(item, "limit_yn", "limitYn")),
+                "limit_detail": _nullable_str(
+                    _json_get(item, "limit_detail", "limitDetail")
+                ),
+                "del_yn": _nullable_str(_json_get(item, "del_yn", "delYn")),
+                "del_detail": _nullable_str(
+                    _json_get(item, "del_detail", "delDetail")
+                ),
+                "traffic_yn": _nullable_str(
+                    _json_get(item, "traffic_yn", "trafficYn")
+                ),
+                "install_year": _nullable_str(
+                    _json_get(item, "install_year", "installYear")
+                ),
+                "floor_num": _nullable_str(_json_get(item, "floor_num", "floorNum")),
+                "floor_type": _nullable_str(
+                    _json_get(item, "floor_type", "floorType")
+                ),
+                "info_updated_at": _nullable_str(
+                    _json_get(item, "info_updated_at", "infoUpdatedAt")
+                ),
+                "charger_status": _nullable_str(
+                    _json_get(item, "charger_status", "chargerStatus")
+                ),
+                "last_updated": _nullable_str(
+                    _json_get(item, "last_updated", "lastUpdated")
+                ),
+            }
+        )
+
+    out.sort(key=lambda row: row["chger_id"])
+    return out
+
+
+# info 전 컬럼 + status 스냅샷 → 소 단위 JSON 배열 (목록 중첩)
+_CHARGERS_SQL = """
+            JSON_ARRAYAGG(
+                JSON_OBJECT(
+                    'chger_id', i.chger_id,
+                    'stat_nm', i.stat_nm,
+                    'chger_type', i.chger_type,
+                    'addr', i.addr,
+                    'addr_detail', i.addr_detail,
+                    'location', i.location,
+                    'lat', i.lat,
+                    'lng', i.lng,
+                    'use_time', i.use_time,
+                    'busi_id', i.busi_id,
+                    'bnm', i.bnm,
+                    'busi_nm', i.busi_nm,
+                    'busi_call', i.busi_call,
+                    'output', i.output,
+                    'method', i.method,
+                    'zcode', i.zcode,
+                    'zscode', i.zscode,
+                    'kind', i.kind,
+                    'kind_detail', i.kind_detail,
+                    'parking_free', i.parking_free,
+                    'note', i.note,
+                    'limit_yn', i.limit_yn,
+                    'limit_detail', i.limit_detail,
+                    'del_yn', i.del_yn,
+                    'del_detail', i.del_detail,
+                    'traffic_yn', i.traffic_yn,
+                    'install_year', i.install_year,
+                    'floor_num', i.floor_num,
+                    'floor_type', i.floor_type,
+                    'info_updated_at', DATE_FORMAT(i.updated_at, '%Y-%m-%dT%H:%i:%s'),
+                    'charger_status', s.charger_status,
+                    'last_updated', DATE_FORMAT(s.last_updated, '%Y-%m-%dT%H:%i:%s')
+                )
+            ) AS chargers_json
+"""
+
+
 def _nullable_float(value: object) -> float | None:
     if value is None:
         return None
@@ -71,6 +210,7 @@ def _station_row(row) -> dict:
         "charger_total": _nullable_int(row["charger_total"]),
         "charger_total_other": _nullable_int(row["charger_total_other"]),
         "charger_types": _split_charger_types(row["charger_types"]),
+        "chargers": _parse_chargers(row.get("chargers_json")),
         "use_time": _nullable_str(row.get("use_time")),
         "busi_nm": _nullable_str(row.get("busi_nm")),
         "busi_call": _nullable_str(row.get("busi_call")),
@@ -213,7 +353,9 @@ def list_stations_near(
 
 {_TOTAL_SQL},
 
-            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types
+            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types,
+
+{_CHARGERS_SQL}
 
         FROM ev_charger_info AS i
 
@@ -289,7 +431,9 @@ def list_stations_viewport(
 
 {_TOTAL_SQL},
 
-            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types
+            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types,
+
+{_CHARGERS_SQL}
 
         FROM ev_charger_info AS i
 

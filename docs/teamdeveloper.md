@@ -1767,3 +1767,187 @@ outeStore: 도착지 preview · startDirections(출발=현위치). FEATURES.tmap
 
 ### 다음
 - 실기기: 자유주행 탭 → 목록/검색 목적지 → 길찾기 → ETA 카드 유지·× 후 요약바 확인.
+
+## 2026-08-04 — 즐겨찾기 별 버튼 (목록·상세)
+
+### 한 일
+- FavoriteStarButton + avoriteStore(stationId 로컬 토글) 추가.
+- StationList 행 우측·StationDetailCard 헤더(× 왼쪽)에 별 버튼 연결. 목록/상세 동기화.
+
+### 결정
+- API·로그인 게이트는 아직 없음. UI 토글만. 즐겨찾기 탭 목록은 Unimplemented 유지.
+
+### 다음
+- favorites API + auth 연동, 즐겨찾기 탭에 저장된 목록 표시.
+## 2026-08-04 — 포인트 지갑·거래·결제 테이블 생성
+
+### 한 일
+- DB에 포인트/결제 최소 스키마 3테이블 생성: point_wallets, point_transactions, payments.
+- 합의 문서의 point_wallets / ledger / payments(B안) 방향을 구체 DDL로 확정.
+
+### 스키마 요약
+
+#### 1) point_wallets (잔액 캐시)
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| user_id | BIGINT PK | users.id FK (ON DELETE RESTRICT) |
+| balance | INT NOT NULL DEFAULT 0 | 포인트 잔액 캐시 (CHECK balance >= 0) |
+| version | INT NOT NULL DEFAULT 0 | 낙관적 락용 버전 |
+| created_at / updated_at | DATETIME | updated_at는 ON UPDATE |
+
+- PK = user_id (유저당 지갑 1개).
+
+#### 2) point_transactions (원장·거래 내역)
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| id | BIGINT AI PK | |
+| wallet_id | BIGINT NOT NULL | point_wallets.user_id FK |
+| type | ENUM(charge,use,refund,expire,bonus,adjust) | 부호는 type으로 판단 |
+| amount | INT NOT NULL | 항상 양수 (CHECK amount > 0) |
+| balance_after | INT NOT NULL | 거래 직후 잔액 스냅샷 |
+| ref_type | ENUM(payment,usage_order,admin,promo) NULL | 다형성 참조 타입 |
+| ref_id | BIGINT NULL | 다형성 FK(DB 미보장, 앱 검증) |
+| idempotency_key | VARCHAR(100) NULL UNIQUE | 중복 적재 방지 |
+| memo | VARCHAR(255) NULL | |
+| created_at | DATETIME | |
+
+- 인덱스: (wallet_id, created_at), (ref_type, ref_id).
+- 
+ef_type/
+ef_id는 둘 다 NULL이거나 둘 다 NOT NULL (CHECK).
+
+#### 3) payments (실결제·충전 주문)
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| id | BIGINT AI PK | |
+| user_id | BIGINT NOT NULL | users.id FK |
+| amount_krw | INT NOT NULL | 실결제 원 (> 0) |
+| points_granted | INT NOT NULL | 지급 포인트(보너스 포함 가능) |
+| bonus_points | INT NOT NULL DEFAULT 0 | 보너스분 (<= points_granted) |
+| status | ENUM(pending,paid,failed,cancelled,refunded) | 기본 pending |
+| pg_provider | ENUM(inicis,test,toss) NULL | |
+| pg_tid | VARCHAR(100) NULL | PG 거래번호(승인 후) |
+| idempotency_key | VARCHAR(64) NULL UNIQUE | |
+| paid_at | DATETIME NULL | |
+| created_at / updated_at | DATETIME | |
+
+- UNIQUE (pg_provider, pg_tid), 인덱스 (user_id, created_at).
+
+### 관계
+`	ext
+users 1 ── 1 point_wallets
+point_wallets 1 ── N point_transactions
+users 1 ── N payments
+payments(paid) ──(앱)──> point_transactions(type=charge, ref_type=payment)
+`
+
+### 결정
+- 테이블명은 합의 초안의 point_ledger 대신 **point_transactions** 사용.
+- 잔액은 point_wallets.balance 캐시 + 거래마다 alance_after 스냅샷.
+- mount는 항상 양수, 증감은 	ype으로 표현.
+- PG는 	est 포함(토이 A/B안 모두 수용). 상용 정산 범위는 여전히 제외.
+- 시크릿·PG 실키는 문서/리포에 넣지 않음.
+
+### 다음
+- BE: wallet 잔액 조회 / 테스트 충전(A안) 또는 PG 콜백(B안) API.
+- 충전 성공 시 payments → point_transactions → point_wallets.balance 트랜잭션 묶기.
+- ORM 모델·OpenAPI 계약 문서화. FE 잔액·충전·내역 UI 연동.
+
+## 2026-08-04 — 검색 preview 충전소조회
+
+### 한 일
+- PlaceSummaryBar: 검색 직후(status=preview)에만 「충전소조회」 버튼 (길찾기 옆). 길찾기 loading/ready/error 이후엔 숨김.
+- mapStore stationsAnchor: 도착지 lat/lng로 목록·마커 fetch. AppShell이 anchor 우선, 없으면 현위치.
+- 클릭 시 시트 half·지도 중심 도착지. setDestination / clearDestination / startDirections 시 anchor 해제.
+
+### 결정
+- 라벨은 짧은 「충전소조회」(aria는 도착지 주변 충전소 조회). RadiusControl(원)은 TMAP 잠금이라 미변경 — 목록/마커만 도착지 기준.
+
+### 다음
+- 반경 원을 도착지 앵커에 맞출지(잠금 해제 승인 후) 검토.
+
+## 2026-08-04 — PlaceSummaryBar CTA 레이아웃
+
+### 한 일
+- preview: 충전소조회를 주소 아래 작은 chip으로 이동(보조). 길찾기는 flex-1 제거 → 오른쪽 내용 폭 pill.
+- 길찾기 행은 나중에 충전확률 버튼을 shrink-0로 옆 추가할 자리만 남김.
+
+### 결정
+- 충전소조회=단순 주변 조회 보조. 메인 CTA는 길찾기(+추후 충전확률).
+
+### 다음
+- 웹에서 preview 카드 밀도·탭 영역 확인.
+
+## 2026-08-04 — RadiusControl 도착지 stationsAnchor 원점
+
+### 한 일
+- RadiusControl: 원·1/2/3 카메라 중심 = stationsAnchor → coords → mapCenter.
+- 고정 줌 프리셋·탭 시에만 카메라·fitBounds 금지는 유지. important.md §2.3 갱신.
+
+### 결정
+- 검색「주변」조회 중 반경 변경 시 현위치로 점프하지 않음. 목록(AppShell)과 지도 원점 일치.
+
+### 다음
+- 데스크톱: 주변 → 2/3km 탭 시 도착지 유지·zoom만 변경 확인. (모바일은 원 미표시·기존 early return 유지)
+
+## 2026-08-04 — 검색·도착지 주변 조회·반경·선택 버그 (통합)
+
+### 한 일
+- **MapSearchBar**: 장소 선택 후 결과 목록 깜빡임 수정. skipDebouncedSearchRef + selectPlace에서 results/error 비움. 
+unSearch는 useMapStore.getState().center + useCallback([], [])로 center deps 재실행 방지.
+- **stationsAnchor** (mapStore): 도착지 주변 충전소 fetch 원점. AppShell origin = stationsAnchor ?? coords ?? DAEGU.
+- **PlaceSummaryBar**: preview(status===preview)에만 「주변」 chip (즐겨찾기 보조·도착지 주변 조회). 길찾기 시작 후 숨김. 카드 max-w 280, 길찾기는 shrink-0. queryNearbyStations → anchor + 시트 half + 지도 중심.
+- **routeStore**: setDestination / clearDestination / startDirections 시 anchor 해제. clearDestination({ keepStationsAnchor }) 옵션 추가.
+- **mapStore.selectStation**: preview 닫을 때 clearDestination({ keepStationsAnchor: true }) — 충전소 탭 시 GPS refetch로 상세가 사라지던 버그 수정.
+- **RadiusControl** (잠금 예외 승인): 원·1/2/3 카메라 중심 = stationsAnchor → coords → mapCenter. 줌 프리셋·탭 시에만 카메라·fitBounds 금지 유지. docs/important.md §2.3 갱신.
+
+### 결정
+- 「주변」= 즐겨찾기 추가용 부산물(즐겨찾기 탭에 검색 대신). AI 충전확률과는 별 CTA(미구현).
+- BE stations API 변경 없음 — 같은 lat/lng/radius_km에 도착지 좌표로 재요청.
+- 현위치 주변조회와 도착지 조회는 동일 fetch/마커, origin(anchor)만 구분. 새 TSX 불필요.
+- ×·길찾기·새 검색은 anchor 해제. 충전소 선택만 anchor 유지.
+
+### 다음
+- 실기기: 검색→주변→목록/마커→상세·별 / 반경 2·3km 도착지 유지 / × 후 GPS 복귀 확인.
+- (선택) 길찾기 시작 시 검색어 clear — 웹 polish, 필수 아님.
+
+## 2026-08-04 — stations 목록에 chargers[] 중첩 (chgerId·status)
+
+### 한 일
+- BE StationItem.chargers: info⋈status 충전기 행을 JSON_ARRAYAGG로 중첩. 필드: chgerId, chgerType, output, chargerStatus, lastUpdated.
+- list_stations_near / list_stations_viewport 동일. 집계(availableCount 등) 규칙 유지.
+- FE 	ypes/station.ts에 Charger / chargers? 타입만 추가 (UI 미표시).
+- stations_api.md (api/web) 문서 반영.
+
+### 결정
+- 목록에 미리 실어 두고 가용대수→버튼 UI는 후속. 대구·limit 규모면 페이로드 OK. 커지면 상세 전용 API로 분리 검토.
+- 최상위 아이템은 계속 stat_id 집계.
+
+### 다음
+- 가용대수 버튼 → chargers[]로 개별 status 표시.
+- (선택) 클릭 시 실시간 status 재조회 vs 목록 스냅샷 사용 정책.
+
+## 2026-08-04 — chargers[]에 info 전 컬럼 확장
+
+### 한 일
+- ChargerItem: ev_charger_info 전 컬럼(+ infoUpdatedAt) + status(chargerStatus, lastUpdated).
+- JSON_ARRAYAGG JSON_OBJECT 확장. stat_id는 상위 stationId와 중복이라 중첩 생략.
+- FE Charger 타입·stations_api.md 동기화.
+
+### 결정
+- 패널용으로 쓸 수 있는 대별 필드는 목록에 미리 실어둠. UI는 후속.
+
+### 다음
+- 가용대수 버튼 → 충전기 패널 (FE).
+
+## 2026-08-04 — 추천 API env / Settings 연동
+
+### 한 일
+- pi/.env.example · .env: RECOMMEND_API_BASE_URL / TIMEOUT / KEY (키 실값 없음).
+- config.py Settings에 동일 필드 추가. README env 이름만 표기.
+
+### 결정
+- 추천은 외부 HTTP. 키는 담당자 배포·git 금지.
+
+### 다음
+- recommendations 라우터 프록시 + CamelModel 스키마 (가이드 §4).

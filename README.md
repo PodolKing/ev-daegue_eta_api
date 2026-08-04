@@ -71,6 +71,9 @@ copy .env.example .env
 | `TMAP_APP_KEY` | Server-only POI/place search, routing/ETA |
 | `CORS_ORIGINS` | Allowed FE origins |
 | `DATA_GO_KR_KEY` | External data / collection (as needed) |
+| `RECOMMEND_API_BASE_URL` | External charger recommend model server |
+| `RECOMMEND_API_TIMEOUT` | Recommend HTTP timeout (seconds; guide ≥10) |
+| `RECOMMEND_API_KEY` | `X-API-Key` for recommend server (secret; local `.env` only) |
 
 Never commit `.env`. Use `.env.example` for key names only.
 
