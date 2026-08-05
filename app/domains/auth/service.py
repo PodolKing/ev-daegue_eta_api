@@ -6,7 +6,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import bcrypt
 import httpx
@@ -510,8 +510,11 @@ def complete_oauth_callback(
 
     settings = get_settings()
     return_path = validate_return_url(state_data.get("return_url"))
-    # FE로 리다이렉트 (쿠키는 응답에 세팅)
-    redirect_url = settings.frontend_origin.rstrip("/") + return_path
+    # FE로 리다이렉트. 토큰은 hash fragment — Vercel↔API 크로스 오리진에서도
+    # localStorage Bearer로 이어짐 (쿠키만으로는 도메인이 달라 FE /me가 안 됨).
+    # Supabase Auth 아님: JWT는 우리 FastAPI 발급 (DB만 Supabase/AWS 교체 가능).
+    base = settings.frontend_origin.rstrip("/") + return_path
+    redirect_url = f"{base}#accessToken={quote(access_token, safe='')}"
     return access_token, user, redirect_url
 
 

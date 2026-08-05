@@ -1979,3 +1979,20 @@ unSearch는 useMapStore.getState().center + useCallback([], [])로 center deps �
 
 ### 다음
 - FE: AI 선택 시 포트·대수 보조 패널 (stations 매칭).
+
+## 2026-08-05 — getApiBase Vercel+LAN · 소셜 자사 JWT
+
+### 한 일
+- FE `getApiBase`: 사설 IPv4(LAN)일 때만 `http://{host}:8000`. Vercel/커스텀 도메인은 `NEXT_PUBLIC_API_BASE_URL`(Render 등).
+- `npm run dev:lan` 스크립트 복구.
+- 소셜: `startOAuthRedirect` 실제 이동. BE 콜백이 `#accessToken=` fragment로 FE에 전달 → `consumeOAuthAccessTokenFromUrl` → localStorage Bearer → `/me`.
+- 문서: `06_auth_me`, `auth_api`, `.env.example` (Vercel/FRONTEND_ORIGIN 주석).
+
+### 결정
+- 소셜/세션은 **우리 FastAPI(Authlib)+JWT+Bearer**. Supabase Auth 미사용 — DB만 Supabase(편의), 이후 AWS 등 교체 가능.
+- 쿠키는 보조; 크로스 오리진(Vercel↔Render)은 fragment 토큰이 본체.
+
+### 다음
+- Vercel: `NEXT_PUBLIC_API_BASE_URL`=Render URL, TMAP 도메인. Render: `CORS_ORIGINS`/`FRONTEND_ORIGIN`=Vercel, OAuth redirect URI·시크릿.
+- 소셜 콘솔 redirect를 Render HTTPS로 등록 후 스모크.
+
