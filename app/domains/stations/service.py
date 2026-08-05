@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 
 DEFAULT_RADIUS_KM = 3.0
 MAX_RADIUS_KM = 10.0
@@ -50,9 +51,12 @@ def _json_get(item: dict, snake: str, camel: str) -> object:
 
 
 def _parse_chargers(value: object) -> list[dict]:
-    """JSON_ARRAYAGG(JSON_OBJECT(...)) → ChargerItem dict list (snake_case)."""
+    """JSON_ARRAYAGG / JSONB_AGG → ChargerItem dict list (snake_case)."""
     if value is None:
         return []
+    # psycopg2 may return list/memoryview for jsonb
+    if isinstance(value, memoryview):
+        value = value.tobytes()
     if isinstance(value, (bytes, bytearray)):
         value = value.decode("utf-8")
     if isinstance(value, str):
@@ -139,7 +143,7 @@ def _parse_chargers(value: object) -> list[dict]:
 
 
 # info 전 컬럼 + status 스냅샷 → 소 단위 JSON 배열 (목록 중첩)
-_CHARGERS_SQL = """
+_CHARGERS_SQL_MYSQL = """
             JSON_ARRAYAGG(
                 JSON_OBJECT(
                     'chger_id', i.chger_id,
@@ -175,6 +179,46 @@ _CHARGERS_SQL = """
                     'charger_status', s.charger_status,
                     'last_updated', DATE_FORMAT(s.last_updated, '%Y-%m-%dT%H:%i:%s')
                 )
+            ) AS chargers_json
+"""
+
+_CHARGERS_SQL_PG = """
+            JSONB_AGG(
+                JSONB_BUILD_OBJECT(
+                    'chger_id', i.chger_id,
+                    'stat_nm', i.stat_nm,
+                    'chger_type', i.chger_type,
+                    'addr', i.addr,
+                    'addr_detail', i.addr_detail,
+                    'location', i.location,
+                    'lat', i.lat,
+                    'lng', i.lng,
+                    'use_time', i.use_time,
+                    'busi_id', i.busi_id,
+                    'bnm', i.bnm,
+                    'busi_nm', i.busi_nm,
+                    'busi_call', i.busi_call,
+                    'output', i.output,
+                    'method', i.method,
+                    'zcode', i.zcode,
+                    'zscode', i.zscode,
+                    'kind', i.kind,
+                    'kind_detail', i.kind_detail,
+                    'parking_free', i.parking_free,
+                    'note', i.note,
+                    'limit_yn', i.limit_yn,
+                    'limit_detail', i.limit_detail,
+                    'del_yn', i.del_yn,
+                    'del_detail', i.del_detail,
+                    'traffic_yn', i.traffic_yn,
+                    'install_year', i.install_year,
+                    'floor_num', i.floor_num,
+                    'floor_type', i.floor_type,
+                    'info_updated_at', TO_CHAR(i.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS'),
+                    'charger_status', s.charger_status,
+                    'last_updated', TO_CHAR(s.last_updated, 'YYYY-MM-DD"T"HH24:MI:SS')
+                )
+                ORDER BY i.chger_id
             ) AS chargers_json
 """
 
@@ -225,7 +269,7 @@ def _station_row(row) -> dict:
 
 # status='2' 집계 / 관측 없음 → NULL (null ≠ 0)
 # 그외: chger_type NOT IN (02,08) 또는 NULL/미상 → other
-_AVAIL_SQL = """
+_AVAIL_SQL_MYSQL = """
             CASE
                 WHEN SUM(
                     CASE
@@ -276,8 +320,59 @@ _AVAIL_SQL = """
             END AS available_count_slow
 """
 
+_AVAIL_SQL_PG = """
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1 ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN s.charger_status = '2'
+                        THEN 1 ELSE 0
+                    END
+                )
+            END AS available_count,
+
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN COALESCE(i.chger_type, '') NOT IN ('02','08')
+                         AND s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1 ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN COALESCE(i.chger_type, '') NOT IN ('02','08')
+                         AND s.charger_status = '2'
+                        THEN 1 ELSE 0
+                    END
+                )
+            END AS available_count_other,
+
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN i.chger_type IN ('02','08')
+                         AND s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1 ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN i.chger_type IN ('02','08')
+                         AND s.charger_status = '2'
+                        THEN 1 ELSE 0
+                    END
+                )
+            END AS available_count_slow
+"""
+
 # 총대수: 전체 + 그외(완속 02/08 제외, 타입 공란→other). 완속 총 = total − other
-_TOTAL_SQL = """
+_TOTAL_SQL_MYSQL = """
             COUNT(DISTINCT i.chger_id) AS charger_total,
 
             COUNT(DISTINCT CASE
@@ -285,6 +380,30 @@ _TOTAL_SQL = """
                 THEN i.chger_id
             END) AS charger_total_other
 """
+
+_TOTAL_SQL_PG = """
+            COUNT(DISTINCT i.chger_id) AS charger_total,
+
+            COUNT(DISTINCT CASE
+                WHEN COALESCE(i.chger_type, '') NOT IN ('02', '08')
+                THEN i.chger_id
+            END) AS charger_total_other
+"""
+
+_TYPES_SQL_MYSQL = """
+            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types
+"""
+
+_TYPES_SQL_PG = """
+            STRING_AGG(DISTINCT i.chger_type, ',' ORDER BY i.chger_type) AS charger_types
+"""
+
+
+def _dialect_sql() -> tuple[str, str, str, str]:
+    """DB_BACKEND=local → MySQL · supabase → Postgres fragments."""
+    if get_settings().db_backend == "supabase":
+        return _AVAIL_SQL_PG, _TOTAL_SQL_PG, _TYPES_SQL_PG, _CHARGERS_SQL_PG
+    return _AVAIL_SQL_MYSQL, _TOTAL_SQL_MYSQL, _TYPES_SQL_MYSQL, _CHARGERS_SQL_MYSQL
 
 
 def list_stations_near(
@@ -316,64 +435,67 @@ def list_stations_near(
     min_lng = lng - lng_delta
     max_lng = lng + lng_delta
 
+    avail_sql, total_sql, types_sql, chargers_sql = _dialect_sql()
+
+    # Postgres: HAVING cannot use SELECT aliases → wrap and filter outer
     sql = text(
         f"""
-        SELECT
-            i.stat_id AS station_id,
-            MAX(i.stat_nm) AS name,
-            MAX(i.addr) AS address,
-            MAX(i.lat) AS lat,
-            MAX(i.lng) AS lng,
-            MAX(i.use_time) AS use_time,
-            MAX(i.busi_nm) AS busi_nm,
-            MAX(i.busi_call) AS busi_call,
-            MIN(i.output) AS output_min,
-            MAX(i.output) AS output_max,
-            MAX(i.limit_detail) AS limit_detail,
-            MAX(i.traffic_yn) AS traffic_yn,
-            MAX(i.parking_free) AS parking_free,
+        SELECT *
+        FROM (
+            SELECT
+                i.stat_id AS station_id,
+                MAX(i.stat_nm) AS name,
+                MAX(i.addr) AS address,
+                MAX(i.lat) AS lat,
+                MAX(i.lng) AS lng,
+                MAX(i.use_time) AS use_time,
+                MAX(i.busi_nm) AS busi_nm,
+                MAX(i.busi_call) AS busi_call,
+                MIN(i.output) AS output_min,
+                MAX(i.output) AS output_max,
+                MAX(i.limit_detail) AS limit_detail,
+                MAX(i.traffic_yn) AS traffic_yn,
+                MAX(i.parking_free) AS parking_free,
 
-            (
-                6371 * ACOS(
-                    LEAST(
-                        1,
-                        GREATEST(
-                            -1,
-                            COS(RADIANS(:lat))
-                            * COS(RADIANS(MAX(i.lat)))
-                            * COS(RADIANS(MAX(i.lng)) - RADIANS(:lng))
-                            + SIN(RADIANS(:lat))
-                            * SIN(RADIANS(MAX(i.lat)))
+                (
+                    6371 * ACOS(
+                        LEAST(
+                            1,
+                            GREATEST(
+                                -1,
+                                COS(RADIANS(:lat))
+                                * COS(RADIANS(MAX(i.lat)))
+                                * COS(RADIANS(MAX(i.lng)) - RADIANS(:lng))
+                                + SIN(RADIANS(:lat))
+                                * SIN(RADIANS(MAX(i.lat)))
+                            )
                         )
                     )
-                )
-            ) AS distance_km,
+                ) AS distance_km,
 
-{_AVAIL_SQL},
+{avail_sql},
 
-{_TOTAL_SQL},
+{total_sql},
 
-            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types,
+{types_sql},
 
-{_CHARGERS_SQL}
+{chargers_sql}
 
-        FROM ev_charger_info AS i
+            FROM ev_charger_info AS i
 
-        LEFT JOIN ev_charger_status AS s
-            ON i.stat_id = s.stat_id
-           AND i.chger_id = s.chger_id
+            LEFT JOIN ev_charger_status AS s
+                ON i.stat_id = s.stat_id
+               AND i.chger_id = s.chger_id
 
-        WHERE i.lat IS NOT NULL
-          AND i.lng IS NOT NULL
-          AND i.lat BETWEEN :min_lat AND :max_lat
-          AND i.lng BETWEEN :min_lng AND :max_lng
+            WHERE i.lat IS NOT NULL
+              AND i.lng IS NOT NULL
+              AND i.lat BETWEEN :min_lat AND :max_lat
+              AND i.lng BETWEEN :min_lng AND :max_lng
 
-        GROUP BY i.stat_id
-
-        HAVING distance_km <= :radius_km
-
+            GROUP BY i.stat_id
+        ) AS near_stations
+        WHERE distance_km <= :radius_km
         ORDER BY distance_km ASC
-
         LIMIT :limit
         """
     )
@@ -410,6 +532,8 @@ def list_stations_viewport(
 
     limit = clamp_limit(limit)
 
+    avail_sql, total_sql, types_sql, chargers_sql = _dialect_sql()
+
     sql = text(
         f"""
         SELECT
@@ -427,13 +551,13 @@ def list_stations_viewport(
             MAX(i.traffic_yn) AS traffic_yn,
             MAX(i.parking_free) AS parking_free,
 
-{_AVAIL_SQL},
+{avail_sql},
 
-{_TOTAL_SQL},
+{total_sql},
 
-            GROUP_CONCAT(DISTINCT i.chger_type ORDER BY i.chger_type) AS charger_types,
+{types_sql},
 
-{_CHARGERS_SQL}
+{chargers_sql}
 
         FROM ev_charger_info AS i
 
