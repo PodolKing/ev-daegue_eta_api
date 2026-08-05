@@ -1965,3 +1965,17 @@ unSearch는 useMapStore.getState().center + useCallback([], [])로 center deps �
 
 ### 다음
 - 실기기: 검색→AI 추천→목록/마커→길찾기 확인.
+
+## 2026-08-04 — AI 추천 연동 현황 정리 (aimodel.md)
+
+### 한 일
+- 워크스페이스 루트 imodel.md 작성 (git 추적 제외, .gitignore 등록).
+- BE 프록시 + FE AI 목록/마커/반경 숨김까지 현 상태·다음(stations statId 매칭) 문서화.
+- teamdeveloper에 본 블록 추가.
+
+### 결정
+- 모델 응답에 포트·가용대수 없음 → FE에서 도착지 stations 병렬 조회 후 statId 매칭 (BE 추가 불필요).
+- aimodel.md는 부모 워크스페이스 전용 — web/api 리포에 넣지 않음.
+
+### 다음
+- FE: AI 선택 시 포트·대수 보조 패널 (stations 매칭).

@@ -14,7 +14,11 @@ class Base(DeclarativeBase):
 
 def is_db_configured() -> bool:
     settings = get_settings()
-    return bool(settings.database_url or settings.db_user)
+    if settings.database_url:
+        return True
+    if settings.db_backend == "supabase":
+        return bool(settings.supabase_db_url.strip())
+    return bool(settings.db_user)
 
 
 @lru_cache

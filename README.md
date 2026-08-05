@@ -21,7 +21,7 @@
 - 응답 필드 **camelCase** 통일
 - Domain 폴더 구조: `stations`(활성) · `auth` / `points`(1개월 토이) · recommendations·traffic 등 스켈레톤
 - TMAP **서버 키**는 ETA·길찾기 등 서버 전용 (목록 거리 계산용 아님)
-- MariaDB/MySQL + SQLAlchemy (`mysql+pymysql://…`, `DB_*` 조립)
+- MariaDB(local) / Supabase Postgres — `DB_BACKEND`로 전환 (`DB_*` 또는 `SUPABASE_DB_URL`)
 
 ## Roadmap (1개월 토이 스코프)
 
@@ -41,7 +41,7 @@
 | Runtime | Python 3.11+ |
 | Framework | FastAPI + Uvicorn |
 | ORM | SQLAlchemy 2 |
-| DB | MariaDB / MySQL |
+| DB | MariaDB (local) / Postgres (Supabase) via `DB_BACKEND` |
 | Validation | Pydantic v2 (`CamelModel`) |
 | Maps (server) | TMAP REST (`TMAP_APP_KEY`) — POI/search, ETA/routing |
 
@@ -66,8 +66,10 @@ copy .env.example .env
 
 | Variable | Role |
 |---|---|
-| `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | Assembled into SQLAlchemy URL |
-| `DATABASE_URL` | Optional override |
+| `DB_BACKEND` | `local` (MariaDB) or `supabase` (Postgres) |
+| `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | Local MariaDB — used when `DB_BACKEND=local` |
+| `SUPABASE_DB_URL` | Supabase Postgres URI — used when `DB_BACKEND=supabase` |
+| `DATABASE_URL` | Optional full override (wins over `DB_BACKEND`) |
 | `TMAP_APP_KEY` | Server-only POI/place search, routing/ETA |
 | `CORS_ORIGINS` | Allowed FE origins |
 | `DATA_GO_KR_KEY` | External data / collection (as needed) |
