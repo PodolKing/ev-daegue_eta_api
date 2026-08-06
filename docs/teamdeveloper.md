@@ -1996,3 +1996,31 @@ unSearch는 useMapStore.getState().center + useCallback([], [])로 center deps �
 - Vercel: `NEXT_PUBLIC_API_BASE_URL`=Render URL, TMAP 도메인. Render: `CORS_ORIGINS`/`FRONTEND_ORIGIN`=Vercel, OAuth redirect URI·시크릿.
 - 소셜 콘솔 redirect를 Render HTTPS로 등록 후 스모크.
 
+## 2026-08-05 — 주변 탐색(map) 모드: 칩 진입 + pan 연속 조회
+
+### 한 일
+- 같은 칩 스위칭: 「주변 탐색하기」↔「현위치로 돌아가기」(선명 칩). 조회 원점 ~500m 이상일 때 진입 칩.
+- 탭 시 stationsAnchor source=map → 반경 원 없음, pan idle 450ms + 250m 이상이면 카메라 중심 재조회.
+- OFF: 칩「현위치로 돌아가기」/ ◎ 현위치 / 카메라가 GPS 300m 이내 자동 해제.
+- 카메라 sync: MapView 잠금 유지. useSyncMapCenterFromCamera(pointerup·dragend → getCenter).
+- policy: web/src/lib/map/mapSearchPolicy.ts (거리·debounce·ALLOW 플래그).
+
+### 결정
+- 기본 강점(현위치·도착지) 유지. 카메라 추종 조회는 명시 진입 후에만.
+- 매 프레임 조회 금지 — idle debounce + 거리 throttle.
+- map 모드에서는 반경 원을 그리지 않음 (도착지 pin·here는 기존).
+
+### 다음
+- 체감 민감도(500/300/250/450ms) 조정. AI 중 진입은 policy false 유지.
+
+## 2026-08-06 — Render: requirements.txt UTF-8 · Python 3.11
+
+### 한 일
+- \pi/requirements.txt\ UTF-16(널 바이트) → UTF-8 재저장. Render \pip install\ Invalid requirement 해소.
+- \pi/.python-version\ = .11.11\ (Render 기본 3.14 회피).
+
+### 결정
+- Linux/Render용 텍스트는 UTF-8. Windows에서 requirements 저장 시 UTF-16 금지.
+
+### 다음
+- api 커밋·푸시 후 Render 재배포. Env: \CORS_ORIGINS\/\FRONTEND_ORIGIN\=Vercel URL, \APP_ENV=production\.
