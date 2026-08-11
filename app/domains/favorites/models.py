@@ -24,8 +24,7 @@ class UserFavoriteStation(Base):
         ),
     )
 
-    # 현재 PostgreSQL 테이블에 Identity가 없어 service에서 ID를 명시한다.
-    id = Column(BigInteger, primary_key=True, autoincrement=False)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     user_id = Column(
         BigInteger,
         ForeignKey("users.id"),
