@@ -1980,6 +1980,56 @@ unSearch는 useMapStore.getState().center + useCallback([], [])로 center deps �
 ### 다음
 - FE: AI 선택 시 포트·대수 보조 패널 (stations 매칭).
 
+---
+
+## 2026-08-05 — DB_BACKEND local|supabase env
+
+### 한 일
+- `DB_BACKEND=local|supabase` 전환. local=`DB_*`(mysql), supabase=`SUPABASE_DB_URL`(Postgres URI → psycopg2).
+- `is_db_configured`·`.env.example`·README·rules 키 이름 반영. `psycopg2-binary` 추가.
+
+### 결정
+- FE anon 키는 이번 범위 밖(BE SQLAlchemy 직결). MySQL 전용 SQL은 supabase 전환 후 별도 정리.
+
+### 다음
+- `.env`에 `SUPABASE_DB_URL` 채운 뒤 `DB_BACKEND=supabase`로 접속 확인. 스키마/마이그레이션은 후속.
+
+---
+
+## 2026-08-05 — 로컬 MariaDB → Supabase 데이터 이전
+
+### 한 일
+- Docker Desktop 기동. pgloader는 SSL 검증 이슈로 포기.
+- 호스트 Python(`scripts/migrate_local_to_supabase.py`)으로 9테이블 이전 완료
+  (ev_charger_info 25399, status 16230, users 6, cars 2, car_models 35 등).
+- Direct `db.*`는 IPv6-only → Session pooler `ap-northeast-1` 사용. config가 direct URI를 pooler로 재작성.
+
+### 다음
+- `DB_BACKEND=supabase`로 앱 기동 후 stations 등 동작 확인. MySQL 전용 SQL 호환은 별도.
+
+---
+
+## 2026-08-05 — stations SQL DB_BACKEND 분기
+
+### 한 일
+- `stations/service.py`: `DB_BACKEND=local` → MySQL(`IFNULL`/`GROUP_CONCAT`/`JSON_ARRAYAGG`), `supabase` → Postgres(`COALESCE`/`STRING_AGG`/`JSONB_AGG`).
+
+### 다음
+- supabase로 stations 목록·viewport 재확인.
+
+---
+
+## 2026-08-05 — Supabase Edge status sync (BE sync 유지)
+
+### 한 일
+- `supabase/functions/fetch-and-upsert`: sync.py와 동일 흐름(getChargerStatus 파싱·정규화·info FK 필터·chunk upsert).
+- FastAPI `EV_STATUS_SYNC`는 그대로. Edge 켤 때 BE sync OFF 권장 (README).
+
+### 다음
+- secrets/`DATA_GO_KR_KEY` 설정 후 deploy·cron. 수동 invoke로 written 건수 확인.
+
+---
+
 ## 2026-08-05 — getApiBase Vercel+LAN · 소셜 자사 JWT
 
 ### 한 일
@@ -2092,3 +2142,116 @@ aver_… 닉네임 계정은 다음 로그인 시 1회 교체.
 
 ### 다음
 - API reload 후 카카오 로그인 재시도.
+
+
+## 2026-08-11 — 사업자 충전요금 테이블(CSV·DDL) 초안
+
+### 한 일
+- 원본 통합 요금 CSV + DB 미매칭 보충분을 usi_id/member_type 스키마로 적재용 CSV 생성.
+- 파일: docs/data/ev_operator_tariffs_import.csv (222행, 사업자 111×회원/비회원), docs/data/ev_operator_tariffs.sql (Postgres DDL).
+- 빌드 스크립트: docs/data/build_ev_operator_tariffs_import.py.
+- 애매 사업자(EZ/YC 등)는 통합 CSV 밴드 median으로 default 보강.
+
+### 결정
+- PK/조인: (busi_id, member_type). 충전소 조인은 usi_id만. operator_nm은 표시용.
+- member_type: member | 
+on_member. 단가 컬럼: 
+ate_slow_* / 
+ate_mid_* / 
+ate_fast_* / 
+ate_ultra_* + default_rate.
+- ev_charger_info에 DB FK는 걸지 않음(usi_id 비유니크).
+
+### 다음
+- Supabase/DBeaver에서 DDL 실행 후 import CSV 적재. BE ORM·API 노출은 별도 승인 후.
+
+## 2026-08-11 — AI 추천 길찾기 → StationDetailCard 통일
+
+### 한 일
+- AI 목록에서 길찾기 시 `ensureStationLoaded`로 `statId` → `GET /stations` hydrate 후 `upsertStations`.
+- `startDirections` → 기존 `StationDetailCard` Directions(세부·ETA). AI 전용 내비 UI 없음.
+- `PlaceSummaryBar`: `recommendActive`면 숨김(목록과 CTA 중복 방지). 닫기 시 요약바 복귀.
+- `mapStore`: `upsertStations` + `setStations` 시 선택 중 station 유지(AppShell 교체와 경합 방지).
+- 가이드: `mapguides.md` §2.6 · 시나리오 J. `mapguide.md`는 리다이렉트만.
+
+### 결정
+- 조회(추천)만 AI 차별. 길찾기·세부는 일반 지도와 동일 UI.
+- BE 변경 없음(근처 stations API 재사용). AI 플로우에서 `selectStation` 금지.
+
+### 다음
+- 실기기: 검색→AI→목록→길찾기→DetailCard Directions / 닫기→요약바 복귀 확인.
+
+## 2026-08-11 — AI 목록 탭 → DetailCard 미리보기
+
+### 한 일
+- AI 행/추천 마커 탭: `ensureStationLoaded` + `focusStationOnMap`(destination 유지) → 기존 DetailCard 기본정보.
+- DetailCard 길찾기: `recommendActive`면 비활성(패널 CTA만 길찾기).
+- `mapStore.focusStationOnMap` 추가 (`selectStation`과 분리).
+
+### 결정
+- 마커 탭과 동일 수준의 정보만. 새 페이지·BE 없음.
+
+### 다음
+- 실기기: 목록/마커 탭→Detail · 길찾기 비활성 · 패널 CTA→Directions 확인.
+
+## 2026-08-11 — AI 목록 Detail 미리보기 시 패널 접기
+
+### 한 일
+- Detail이 열리면 RecommendStationPanel을 한 줄(이름·목록·닫기)+길찾기 CTA로 접음.
+- 「목록」→ Detail 닫고 목록 재펼침(모바일 공간).
+
+### 결정
+- 목록+Detail 동시 풀사이즈 금지(모바일 가림).
+
+### 다음
+- 실기기 좁은 화면에서 접힘/목록/길찾기 확인.
+
+## 2026-08-11 — 주변 카테고리 칩 UI 스텁
+
+### 한 일
+- PlaceCategoryChips: 맛집·카페·편의점·주차장 칩 (탭 토글 UI만, API 없음).
+- MapSearchBar 검색바 펼침 시에만 표시 (모바일 아이콘 접힘 = 칩 숨김).
+
+### 결정
+- 접힘 상태엔 칩 상시 노출 안 함. BE around 연동은 이후.
+
+### 다음
+- BE places around 프록시 + 칩 → 검색/마커 연동.
+
+## 2026-08-11 — places around (TMAP 카테고리) 프록시
+
+### 한 일
+- BE GET /api/v1/places/around — TMAP /pois/search/around 프록시.
+- client.fetch_tmap_around_places + 공통 _normalize_pois. radius 1~33 클램프.
+
+### 결정
+- 응답은 기존 PlaceResult 재사용. FE 칩(맛집/카페/편의점/주차장) 연동은 다음.
+
+### 다음
+- FE searchPlacesAround + PlaceCategoryChips 연동.
+
+## 2026-08-11 — FE places around 칩 연동
+
+### 한 일
+- searchTmapPlacesAround → BE /places/around.
+- MapSearchBar 
+unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
+- 칩 토글 off clear · query clear 레이스(skipDebouncedSearchRef) 수정.
+
+### 결정
+- 반경=지도 radiusKm. 마커는 아직 없음(리스트만).
+
+### 다음
+- 실기기 칩→목록→선택 destination 확인. 카테고리 마커(선택).
+
+## 2026-08-11 — 카테고리 POI 전용 마커
+
+### 한 일
+- 칩별 SVG 핀(맛집/카페/편의점/주차장) + PlaceCategoryMarkers.
+- placeCategoryStore로 리스트·마커 공유. MapView 조합만(SDK 락 미변경).
+
+### 결정
+- 리스트 유지 + 마커 병행. 티맵 내장 카테고리 아이콘 없음 → FE SVG.
+
+### 다음
+- 실기기: 칩→핀·목록→탭 destination 확인.
