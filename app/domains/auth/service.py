@@ -11,6 +11,7 @@ from urllib.parse import quote, urlencode, urlparse
 import bcrypt
 import httpx
 import jwt
+from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.httpx_client import OAuth2Client
 from fastapi import HTTPException
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -38,7 +39,8 @@ _OAUTH_META: dict[str, dict[str, str]] = {
         "authorize": "https://kauth.kakao.com/oauth/authorize",
         "token": "https://kauth.kakao.com/oauth/token",
         "userinfo": "https://kapi.kakao.com/v2/user/me",
-        "scope": "profile_nickname",
+        # 닉네임은 서버에서 카카오+번호로 생성 — profile_nickname 동의 불필요
+        "scope": "",
     },
     AuthProvider.NAVER.value: {
         "authorize": "https://nid.naver.com/oauth2.0/authorize",
@@ -341,19 +343,30 @@ def build_authorize_url(provider: str, *, return_url: str | None = None) -> str:
 
 
 def exchange_code_for_token(provider: AuthProvider, *, code: str) -> dict[str, Any]:
-    """authorization code → access_token (Authlib OAuth2Client)."""
+    """authorization code → access_token (Authlib OAuth2Client).
+
+    카카오 등은 form body에 client_id/secret을 기대하므로 client_secret_post 사용.
+    (기본 client_secret_basic이면 카카오가 client_id=null로 거절)
+    """
     client_id, client_secret, redirect_uri = _oauth_credentials(provider)
     meta = _OAUTH_META[provider.value]
-    with OAuth2Client(
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uri=redirect_uri,
-    ) as client:
-        token = client.fetch_token(
-            meta["token"],
-            code=code,
-            grant_type="authorization_code",
-        )
+    try:
+        with OAuth2Client(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            token_endpoint_auth_method="client_secret_post",
+        ) as client:
+            token = client.fetch_token(
+                meta["token"],
+                code=code,
+                grant_type="authorization_code",
+            )
+    except OAuthError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"토큰 교환 실패 ({provider.value})",
+        ) from exc
     if not token or not token.get("access_token"):
         raise HTTPException(status_code=400, detail="토큰 교환 실패")
     return dict(token)
@@ -373,29 +386,46 @@ def fetch_social_profile(
 
     if provider == AuthProvider.GOOGLE:
         provider_id = str(data.get("sub") or "")
-        nickname = str(data.get("name") or data.get("email") or f"google_{provider_id}")
     elif provider == AuthProvider.KAKAO:
         provider_id = str(data.get("id") or "")
-        props = data.get("properties") or {}
-        account = data.get("kakao_account") or {}
-        profile = account.get("profile") or {}
-        nickname = str(
-            props.get("nickname")
-            or profile.get("nickname")
-            or f"kakao_{provider_id}"
-        )
     else:  # NAVER
         body = data.get("response") or {}
         provider_id = str(body.get("id") or "")
-        nickname = str(
-            body.get("nickname") or body.get("name") or f"naver_{provider_id}"
-        )
 
     if not provider_id:
         raise HTTPException(status_code=400, detail="소셜 사용자 ID 없음")
-    # nickname 길이 제한 (DB 30)
-    nickname = nickname.strip()[:30] or f"{provider.value}_{provider_id}"[:30]
+    # UI 닉네임: 제공자 한글명 + 4자리 (프로필명·식별값 미사용)
+    nickname = _social_display_nickname(provider)
     return provider_id, nickname
+
+
+_SOCIAL_NICK_LABEL: dict[AuthProvider, str] = {
+    AuthProvider.GOOGLE: "구글",
+    AuthProvider.KAKAO: "카카오",
+    AuthProvider.NAVER: "네이버",
+}
+
+
+def _social_display_nickname(provider: AuthProvider) -> str:
+    """소셜 UI 닉네임: 구글/카카오/네이버 + 4자리 (예: 카카오4821)."""
+    label = _SOCIAL_NICK_LABEL[provider]
+    return f"{label}{secrets.randbelow(9000) + 1000}"
+
+
+def _is_social_display_nickname(provider: AuthProvider, nickname: str | None) -> bool:
+    """이미 새 형식(카카오1234 또는 충돌 접미사 포함)인지."""
+    t = (nickname or "").strip()
+    label = _SOCIAL_NICK_LABEL.get(provider)
+    if not label or not t.startswith(label):
+        return False
+    rest = t[len(label) :]
+    if rest.isdigit() and len(rest) == 4:
+        return True
+    # _unique_nickname 충돌 접미사: 카카오1234_ab12
+    if "_" in rest:
+        num, _, suffix = rest.partition("_")
+        return num.isdigit() and len(num) == 4 and bool(suffix)
+    return False
 
 
 def _unique_nickname(db: Session, base: str) -> str:
@@ -434,6 +464,14 @@ def upsert_social_user(
         if existing:
             if not existing.is_active:
                 raise HTTPException(status_code=403, detail="비활성 계정")
+            # 구 프로필/식별 닉네임 → 제공자한글+번호로 1회 교체
+            if not _is_social_display_nickname(provider, existing.nickname):
+                existing.nickname = _unique_nickname(
+                    db, _social_display_nickname(provider)
+                )
+                existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                db.commit()
+                db.refresh(existing)
             return existing
 
         # user_id: provider_providerId (50자 제한)
