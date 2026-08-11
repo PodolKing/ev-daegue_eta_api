@@ -1,6 +1,5 @@
 # 즐겨찾기 비즈니스 로직
 # 충전소 단위 등록/해제, 전체 조회, 최대 10개 제한을 담당한다.
-import secrets
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -20,20 +19,6 @@ MAX_FAVORITES = 10
 def _now() -> datetime:
     """PostgreSQL TIMESTAMP 컬럼에 저장할 UTC 기준 naive datetime."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-def _new_favorite_id(db: Session) -> int:
-    """DB Identity가 없는 현재 테이블용 충돌 가능성이 매우 낮은 BIGINT ID."""
-    for _ in range(5):
-        candidate = secrets.randbits(63) or 1
-        exists = db.scalar(
-            select(UserFavoriteStation.id).where(
-                UserFavoriteStation.id == candidate
-            )
-        )
-        if exists is None:
-            return candidate
-    raise RuntimeError("즐겨찾기 ID 생성 실패")
 
 
 def _favorite_count(db: Session, *, user_pk: int) -> int:
@@ -141,7 +126,6 @@ def toggle_favorite(
 
         now = _now()
         favorite = UserFavoriteStation(
-            id=_new_favorite_id(db),
             user_id=user_pk,
             stat_id=station_key,
             memo=memo_value,
