@@ -92,7 +92,7 @@ def logout(response: Response) -> dict:
 
 
 def oauth_login_redirect(provider: str, return_url: str | None) -> RedirectResponse:
-    """GET /{provider}/login → 제공자 authorize URL로 302."""
+    """GET /login/{provider} → 제공자 authorize URL로 302."""
     url = auth_service.build_authorize_url(provider, return_url=return_url)
     return RedirectResponse(url=url, status_code=302)
 
@@ -105,7 +105,7 @@ def oauth_callback(
     state: str | None,
     error: str | None = None,
 ) -> RedirectResponse:
-    """GET /{provider}/callback → upsert + 쿠키 JWT → FE 리다이렉트."""
+    """GET /callback/{provider} → upsert + 쿠키 JWT → FE 리다이렉트."""
     if error:
         return RedirectResponse(
             url=auth_service.frontend_error_redirect(error),

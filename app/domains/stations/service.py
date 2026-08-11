@@ -5,8 +5,6 @@ from decimal import Decimal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
-
 DEFAULT_RADIUS_KM = 3.0
 MAX_RADIUS_KM = 10.0
 DEFAULT_LIMIT = 50
@@ -399,11 +397,19 @@ _TYPES_SQL_PG = """
 """
 
 
-def _dialect_sql() -> tuple[str, str, str, str]:
-    """DB_BACKEND=local → MySQL · supabase → Postgres fragments."""
-    if get_settings().db_backend == "supabase":
+def _dialect_sql(db: Session) -> tuple[str, str, str, str]:
+    """환경변수가 아닌 실제 SQLAlchemy 연결 dialect로 SQL 조각을 선택한다."""
+    dialect = db.get_bind().dialect.name
+    if dialect == "postgresql":
         return _AVAIL_SQL_PG, _TOTAL_SQL_PG, _TYPES_SQL_PG, _CHARGERS_SQL_PG
-    return _AVAIL_SQL_MYSQL, _TOTAL_SQL_MYSQL, _TYPES_SQL_MYSQL, _CHARGERS_SQL_MYSQL
+    if dialect in {"mysql", "mariadb"}:
+        return (
+            _AVAIL_SQL_MYSQL,
+            _TOTAL_SQL_MYSQL,
+            _TYPES_SQL_MYSQL,
+            _CHARGERS_SQL_MYSQL,
+        )
+    raise RuntimeError(f"지원하지 않는 DB dialect: {dialect}")
 
 
 def list_stations_near(
@@ -435,7 +441,7 @@ def list_stations_near(
     min_lng = lng - lng_delta
     max_lng = lng + lng_delta
 
-    avail_sql, total_sql, types_sql, chargers_sql = _dialect_sql()
+    avail_sql, total_sql, types_sql, chargers_sql = _dialect_sql(db)
 
     # Postgres: HAVING cannot use SELECT aliases → wrap and filter outer
     sql = text(
@@ -532,7 +538,7 @@ def list_stations_viewport(
 
     limit = clamp_limit(limit)
 
-    avail_sql, total_sql, types_sql, chargers_sql = _dialect_sql()
+    avail_sql, total_sql, types_sql, chargers_sql = _dialect_sql(db)
 
     sql = text(
         f"""

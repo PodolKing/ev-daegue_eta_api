@@ -18,6 +18,7 @@ from app.domains.traffic.router import router as traffic_router
 from app.domains.weather.router import router as weather_router
 from app.domains.stations.sync import _ensure_sync_logging
 from app.domains.routes.router import router as routes_router
+from app.domains.favorites.router import router as favorites_router
 
 settings = get_settings()
 _ensure_sync_logging()
@@ -65,3 +66,5 @@ app.include_router(places_router)
 app.include_router(routes_router)
 app.include_router(history_router)
 app.include_router(admin_router)
+app.include_router(favorites_router)
+
