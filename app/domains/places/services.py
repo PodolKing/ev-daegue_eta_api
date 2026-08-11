@@ -1,21 +1,8 @@
-from app.domains.places.client import fetch_tmap_places
+from app.domains.places.client import fetch_tmap_around_places, fetch_tmap_places
 from app.domains.places.place import PlaceResult
 
 
-async def search_places(
-    keyword: str,
-    lat: float | None = None,
-    lng: float | None = None,
-    radius_km: float | None = None,
-) -> list[PlaceResult]:
-    # client 함수로 인자 전달
-    results = await fetch_tmap_places(
-        keyword=keyword,
-        center_lat=lat,
-        center_lng=lng,
-        radius_km=radius_km,
-    )
-
+def _to_place_results(results: list[dict]) -> list[PlaceResult]:
     return [
         PlaceResult(
             id=str(item["id"]),
@@ -29,3 +16,33 @@ async def search_places(
         and item.get("lat") is not None
         and item.get("lng") is not None
     ]
+
+
+async def search_places(
+    keyword: str,
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_km: float | None = None,
+) -> list[PlaceResult]:
+    results = await fetch_tmap_places(
+        keyword=keyword,
+        center_lat=lat,
+        center_lng=lng,
+        radius_km=radius_km,
+    )
+    return _to_place_results(results)
+
+
+async def search_places_around(
+    categories: str,
+    lat: float,
+    lng: float,
+    radius_km: float = 1,
+) -> list[PlaceResult]:
+    results = await fetch_tmap_around_places(
+        categories=categories,
+        center_lat=lat,
+        center_lng=lng,
+        radius_km=radius_km,
+    )
+    return _to_place_results(results)
