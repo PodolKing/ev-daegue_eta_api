@@ -33,10 +33,17 @@ async def search_places_around(
     lat: float = Query(..., description="중심 위도"),
     lng: float = Query(..., description="중심 경도"),
     radius_km: float = Query(1, ge=1, le=33, description="검색 반경 (km, 1~33)"),
+    count: int = Query(
+        50,
+        ge=1,
+        le=200,
+        description="최대 결과 수 (UI: 1km→50 / 2km→100 / 3km→150)",
+    ),
 ) -> list[PlaceResult]:
     return await search_places_around_service(
         categories=categories,
         lat=lat,
         lng=lng,
         radius_km=radius_km,
+        count=count,
     )
