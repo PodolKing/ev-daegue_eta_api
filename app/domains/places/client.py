@@ -89,7 +89,7 @@ async def fetch_tmap_around_places(
     center_lat: float,
     center_lng: float,
     radius_km: float = 1,
-    count: int = 20,
+    count: int = 50,
 ) -> list[dict]:
     app_key = get_settings().tmap_app_key
     if not app_key:

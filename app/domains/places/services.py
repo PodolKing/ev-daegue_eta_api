@@ -38,11 +38,13 @@ async def search_places_around(
     lat: float,
     lng: float,
     radius_km: float = 1,
+    count: int = 50,
 ) -> list[PlaceResult]:
     results = await fetch_tmap_around_places(
         categories=categories,
         center_lat=lat,
         center_lng=lng,
         radius_km=radius_km,
+        count=count,
     )
     return _to_place_results(results)

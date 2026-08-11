@@ -2255,3 +2255,52 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 
 ### 다음
 - 실기기: 칩→핀·목록→탭 destination 확인.
+
+---
+
+## 2026-08-11 — places/around 중심·건수
+
+### 한 일
+- 카테고리 around 조회 중심: map \center\만 쓰던 것을 충전소와 동일하게 \stationsAnchor → GPS → center\로 맞춤 (\MapSearchBar\).
+- 건수: BE \count\ 쿼리(1~200, 기본 50). FE \placeAroundLimitForRadiusKm\ — 1km→50 / 2km→100 / 3km→150.
+
+### 결정
+- stations limit(3km→200)과 places(3km→150)는 분리 유지.
+
+### 다음
+- 칩·반경 변경 시 마커 수·원점 체감 확인.
+
+---
+
+## 2026-08-11 — 모바일 카테고리 칩: 결과 리스트 닫기
+
+### 한 일
+- compact에서 카테고리 around 실행 시 \setOpen(false)\ — 검색 결과 패널 미표시(마커·store는 유지). 데스크톱은 기존처럼 리스트 오픈.
+
+### 다음
+- 모바일에서 칩 탭 → 리스트 없이 지도 마커만 확인.
+
+---
+
+## 2026-08-11 — 모바일 카테고리 마커 탭
+
+### 한 일
+- PlaceCategoryMarkers: StationMarkers와 동일하게 map DOM capture 탭 hit-test (TMAP Marker click 미신뢰).
+- 충전소·카테고리 POI가 겹치면 더 가까운 쪽 선택(동거리면 POI). earestLatLngItem\ 공유.
+
+### 다음
+- 모바일에서 칩 → 마커 탭 → 도착지/요약바 확인.
+
+---
+
+## 2026-08-11 — PlaceSummaryBar AI 숨김 (POI)
+
+### 한 일
+- \destination.stationId\ 없을 때(카테고리·키워드 POI) AI 추천 버튼 숨김. 길찾기만 노출. 충전소 도착지는 유지.
+
+### 결정
+- 비활성 대신 숨김 (혼동·죽은 컨트롤 방지).
+
+### 다음
+- 카테고리/검색 장소 선택 → AI 없이 길찾기만 확인.
+
