@@ -67,23 +67,6 @@ class EvChargerStatus(Base):
     last_updated = Column(DateTime)
 
 
-class UserFavoriteCharger(Base):
-    __tablename__ = "user_favorite_chargers"
-    __table_args__ = (
-        UniqueConstraint("user_id", "stat_id", "chger_id", name="uk_user_charger"),
-        ForeignKeyConstraint(
-            ["stat_id", "chger_id"],
-            ["ev_charger_info.stat_id", "ev_charger_info.chger_id"],
-        ),
-    )
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
-    stat_id = Column(String(20), nullable=False)
-    chger_id = Column(String(10), nullable=False)
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
-
-
 class FuelType(str, enum.Enum):
     EV = "EV"
     PHEV = "PHEV"

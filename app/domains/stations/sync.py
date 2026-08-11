@@ -16,7 +16,8 @@ from typing import Any
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy.dialects.mysql import insert
+from sqlalchemy.dialects.mysql import insert as mysql_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import get_settings
 from app.core.database import get_session_factory, is_db_configured
@@ -196,16 +197,29 @@ def _upsert_rows(rows: list[dict[str, Any]]) -> int:
         if not rows:
             return 0
 
-        # MySQL 다중 VALUES + ON DUPLICATE KEY UPDATE
+        # 실제 연결 dialect에 맞는 다중 행 upsert 사용
+        dialect = db.get_bind().dialect.name
         chunk_size = 500
         written = 0
         for i in range(0, len(rows), chunk_size):
             chunk = rows[i : i + chunk_size]
-            stmt = insert(EvChargerStatus).values(chunk)
-            stmt = stmt.on_duplicate_key_update(
-                charger_status=stmt.inserted.charger_status,
-                last_updated=stmt.inserted.last_updated,
-            )
+            if dialect == "postgresql":
+                stmt = pg_insert(EvChargerStatus).values(chunk)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["stat_id", "chger_id"],
+                    set_={
+                        "charger_status": stmt.excluded.charger_status,
+                        "last_updated": stmt.excluded.last_updated,
+                    },
+                )
+            elif dialect in {"mysql", "mariadb"}:
+                stmt = mysql_insert(EvChargerStatus).values(chunk)
+                stmt = stmt.on_duplicate_key_update(
+                    charger_status=stmt.inserted.charger_status,
+                    last_updated=stmt.inserted.last_updated,
+                )
+            else:
+                raise RuntimeError(f"지원하지 않는 DB dialect: {dialect}")
             db.execute(stmt)
             written += len(chunk)
         db.commit()
