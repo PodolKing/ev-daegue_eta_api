@@ -225,6 +225,107 @@ def get_user_by_token_payload(db: Session, payload: dict) -> User | None:
         return None
 
 
+def update_profile(
+    db: Session,
+    *,
+    user: User,
+    nickname: str | None,
+    address: str | None,
+    detail_address: str | None,
+    address_set: bool,
+    detail_address_set: bool,
+) -> User:
+    """닉네임·주소 수정. None이 아닌(또는 명시된) 필드만 반영."""
+    try:
+        if nickname is None and not address_set and not detail_address_set:
+            raise HTTPException(status_code=400, detail="수정할 항목이 없습니다")
+
+        row = db.get(User, int(user.id))
+        if row is None or row.deleted_at is not None or not row.is_active:
+            raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다")
+
+        if nickname is not None:
+            nick = nickname.strip()
+            if not nick:
+                raise HTTPException(status_code=400, detail="nickname은 비울 수 없습니다")
+            if len(nick) > 30:
+                raise HTTPException(status_code=400, detail="nickname은 30자 이내입니다")
+            clash = db.scalar(
+                select(User).where(
+                    User.nickname == nick,
+                    User.id != row.id,
+                    User.deleted_at.is_(None),
+                )
+            )
+            if clash is not None:
+                raise HTTPException(status_code=400, detail="이미 사용 중인 nickname입니다")
+            row.nickname = nick
+
+        if address_set:
+            if address is None:
+                row.address = None
+            else:
+                row.address = address.strip() or None
+
+        if detail_address_set:
+            if detail_address is None:
+                row.detail_address = None
+            else:
+                row.detail_address = detail_address.strip() or None
+
+        row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.commit()
+        db.refresh(row)
+        return row
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="nickname 중복") from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
+def withdraw_user(db: Session, *, user: User) -> None:
+    """
+    회원 탈퇴(소프트 삭제).
+    deleted_at + is_active=False, 식별자 익명화로 UNIQUE 재가입 허용.
+    """
+    try:
+        row = db.get(User, int(user.id))
+        if row is None or row.deleted_at is not None:
+            raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다")
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        pk = int(row.id)
+        # VARCHAR 한도: user_id 50, nickname 30
+        row.user_id = f"deleted_{pk}"[:50]
+        row.nickname = f"탈퇴_{pk}"[:30]
+        row.password = None
+        row.provider_id = None
+        row.is_active = False
+        row.deleted_at = now
+        row.updated_at = now
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="회원 탈퇴 처리 실패") from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
 # --- 소셜 OAuth 헬퍼 ---
 
 

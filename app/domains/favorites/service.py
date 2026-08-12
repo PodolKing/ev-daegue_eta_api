@@ -52,6 +52,22 @@ def _station_exists(db: Session, *, station_id: str) -> bool:
     return value is not None
 
 
+def _lock_user(db: Session, *, user_pk: int) -> None:
+    """같은 사용자의 동시 등록/해제를 직렬화한다."""
+    user_exists = db.execute(
+        select(User.id).where(User.id == user_pk).with_for_update()
+    ).scalar_one_or_none()
+    if user_exists is None:
+        raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다")
+
+
+def _normalize_station_id(station_id: str) -> str:
+    station_key = station_id.strip()
+    if not station_key:
+        raise HTTPException(status_code=400, detail="stationId는 필수입니다")
+    return station_key
+
+
 def is_favorite(db: Session, *, user_pk: int, station_id: str) -> bool:
     """특정 충전소의 즐겨찾기 등록 여부."""
     favorite_id = db.scalar(
@@ -63,7 +79,7 @@ def is_favorite(db: Session, *, user_pk: int, station_id: str) -> bool:
     return favorite_id is not None
 
 
-def toggle_favorite(
+def add_favorite(
     db: Session,
     *,
     user_pk: int,
@@ -71,24 +87,16 @@ def toggle_favorite(
     memo: str | None,
 ) -> dict[str, object]:
     """
-    별 마크 토글.
+    즐겨찾기 등록.
 
-    - 등록 상태면 행을 삭제한다.
-    - 미등록 상태면 최대 10개와 충전소 존재 여부를 확인한 뒤 등록한다.
+    - 이미 등록된 경우 409.
     - 10개 제한은 HTTP 오류가 아니라 processed=false 결과로 반환한다.
     """
-    station_key = station_id.strip()
+    station_key = _normalize_station_id(station_id)
     memo_value = (memo or "").strip() or None
-    if not station_key:
-        raise HTTPException(status_code=400, detail="stationId는 필수입니다")
 
     try:
-        # 같은 사용자의 동시 토글을 직렬화해 10개 제한 초과를 방지한다.
-        user_exists = db.execute(
-            select(User.id).where(User.id == user_pk).with_for_update()
-        ).scalar_one_or_none()
-        if user_exists is None:
-            raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다")
+        _lock_user(db, user_pk=user_pk)
 
         favorite = db.scalar(
             select(UserFavoriteStation).where(
@@ -97,24 +105,13 @@ def toggle_favorite(
             )
         )
         if favorite is not None:
-            db.delete(favorite)
-            db.flush()
-            count = _favorite_count(db, user_pk=user_pk)
-            db.commit()
-            return {
-                "processed": True,
-                "is_favorite": False,
-                "favorite_count": count,
-                "code": "FAVORITE_REMOVED",
-                "message": "즐겨찾기에서 해제되었습니다",
-            }
+            raise HTTPException(status_code=409, detail="이미 즐겨찾기에 등록된 충전소입니다")
 
         if not _station_exists(db, station_id=station_key):
             raise HTTPException(status_code=404, detail="충전소를 찾을 수 없습니다")
 
         count = _favorite_count(db, user_pk=user_pk)
         if count >= MAX_FAVORITES:
-            # 잠금 해제. 데이터 변경 없이 정상 응답한다.
             db.commit()
             return {
                 "processed": False,
@@ -125,14 +122,15 @@ def toggle_favorite(
             }
 
         now = _now()
-        favorite = UserFavoriteStation(
-            user_id=user_pk,
-            stat_id=station_key,
-            memo=memo_value,
-            created_at=now,
-            last_used_at=now,
+        db.add(
+            UserFavoriteStation(
+                user_id=user_pk,
+                stat_id=station_key,
+                memo=memo_value,
+                created_at=now,
+                last_used_at=now,
+            )
         )
-        db.add(favorite)
         db.commit()
         return {
             "processed": True,
@@ -140,6 +138,49 @@ def toggle_favorite(
             "favorite_count": count + 1,
             "code": "FAVORITE_ADDED",
             "message": "즐겨찾기에 등록되었습니다",
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
+def remove_favorite(
+    db: Session,
+    *,
+    user_pk: int,
+    station_id: str,
+) -> dict[str, object]:
+    """즐겨찾기 해제. 미등록이면 404."""
+    station_key = _normalize_station_id(station_id)
+
+    try:
+        _lock_user(db, user_pk=user_pk)
+
+        favorite = db.scalar(
+            select(UserFavoriteStation).where(
+                UserFavoriteStation.user_id == user_pk,
+                UserFavoriteStation.stat_id == station_key,
+            )
+        )
+        if favorite is None:
+            raise HTTPException(status_code=404, detail="즐겨찾기에 등록되지 않은 충전소입니다")
+
+        db.delete(favorite)
+        db.flush()
+        count = _favorite_count(db, user_pk=user_pk)
+        db.commit()
+        return {
+            "processed": True,
+            "is_favorite": False,
+            "favorite_count": count,
+            "code": "FAVORITE_REMOVED",
+            "message": "즐겨찾기에서 해제되었습니다",
         }
     except HTTPException:
         db.rollback()

@@ -12,7 +12,10 @@ from app.domains.auth.schema import (
     MeResponse,
     SignupRequest,
     SignupResponse,
+    UpdateProfileRequest,
+    UpdateProfileResponse,
     UserPublic,
+    WithdrawResponse,
 )
 
 
@@ -86,6 +89,38 @@ def logout(response: Response) -> dict:
     """클라이언트의 Bearer 토큰 삭제 + HttpOnly 쿠키 제거."""
     _clear_auth_cookie(response)
     return {"ok": True, "message": "클라이언트의 accessToken을 삭제하세요"}
+
+
+def update_profile(
+    db: Session | None,
+    user: User,
+    body: UpdateProfileRequest,
+) -> UpdateProfileResponse:
+    """닉네임·주소 수정."""
+    session = _require_db(db)
+    fields_set = body.model_fields_set
+    updated = auth_service.update_profile(
+        session,
+        user=user,
+        nickname=body.nickname,
+        address=body.address,
+        detail_address=body.detail_address,
+        address_set="address" in fields_set,
+        detail_address_set="detail_address" in fields_set,
+    )
+    return UpdateProfileResponse(user=_to_public(updated))
+
+
+def withdraw(
+    db: Session | None,
+    user: User,
+    response: Response,
+) -> WithdrawResponse:
+    """회원 탈퇴 + 인증 쿠키 제거."""
+    session = _require_db(db)
+    auth_service.withdraw_user(session, user=user)
+    _clear_auth_cookie(response)
+    return WithdrawResponse()
 
 
 # --- 소셜 OAuth ---

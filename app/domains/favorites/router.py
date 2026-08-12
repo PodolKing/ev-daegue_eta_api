@@ -1,5 +1,4 @@
 # 즐겨찾기 HTTP 라우터
-# 현재 작업물에서는 app/main.py에 등록하지 않는다.
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -9,11 +8,11 @@ from app.domains.auth.models import User
 
 from . import controller as favorites_controller
 from .schema import (
+    FavoriteAddRequest,
     FavoriteListResponse,
     FavoriteMutationResponse,
     FavoriteSort,
     FavoriteStatusResponse,
-    FavoriteToggleRequest,
 )
 
 router = APIRouter(prefix="/api/v1/favorites", tags=["favorites"])
@@ -42,14 +41,24 @@ def favorite_status(
     return favorites_controller.status(db, user, station_id)
 
 
-@router.post("/toggle", response_model=FavoriteMutationResponse)
-def toggle_favorite(
-    body: FavoriteToggleRequest,
+@router.post("", response_model=FavoriteMutationResponse)
+def add_favorite(
+    body: FavoriteAddRequest,
     db: Session | None = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> FavoriteMutationResponse:
     """
-    즐겨찾기 마크 토글.
+    즐겨찾기 등록.
     등록 10개 초과 시 오류 대신 processed=false를 반환한다.
     """
-    return favorites_controller.toggle(db, user, body)
+    return favorites_controller.add(db, user, body)
+
+
+@router.delete("/{station_id}", response_model=FavoriteMutationResponse)
+def remove_favorite(
+    station_id: str,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FavoriteMutationResponse:
+    """즐겨찾기 해제."""
+    return favorites_controller.remove(db, user, station_id)

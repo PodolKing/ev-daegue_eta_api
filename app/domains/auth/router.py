@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.domains.auth import controller as auth_controller
-from app.domains.auth.deps import get_current_user_optional
+from app.domains.auth.deps import get_current_user, get_current_user_optional
 from app.domains.auth.models import User
 from app.domains.auth.schema import (
     LoginRequest,
@@ -13,6 +13,9 @@ from app.domains.auth.schema import (
     MeResponse,
     SignupRequest,
     SignupResponse,
+    UpdateProfileRequest,
+    UpdateProfileResponse,
+    WithdrawResponse,
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -31,6 +34,26 @@ def login(body: LoginRequest, db: Session | None = Depends(get_db)) -> LoginResp
 @router.get("/me", response_model=MeResponse)
 def me(user: User | None = Depends(get_current_user_optional)) -> MeResponse:
     return auth_controller.me(user)
+
+
+@router.patch("/me", response_model=UpdateProfileResponse)
+def update_profile(
+    body: UpdateProfileRequest,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> UpdateProfileResponse:
+    """회원 정보 수정 (닉네임, 주소)."""
+    return auth_controller.update_profile(db, user, body)
+
+
+@router.delete("/me", response_model=WithdrawResponse)
+def withdraw(
+    response: Response,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> WithdrawResponse:
+    """회원 탈퇴 (소프트 삭제)."""
+    return auth_controller.withdraw(db, user, response)
 
 
 @router.post("/logout")
