@@ -2304,3 +2304,140 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 ### 다음
 - 카테고리/검색 장소 선택 → AI 없이 길찾기만 확인.
 
+---
+
+## 2026-08-11 — 자유주행 시 카테고리 자동 재검색
+
+### 한 일
+- 칩 활성 + 자유주행(testMode)에서 coords가 마지막 around 원점 대비 ≥150m 이동하면 silent 재검색.
+- stationsAnchor(도착지) 있으면 스킵.
+
+### 다음
+- 칩 켠 뒤 자유주행 탭 → 마커가 새 점 주변으로 갱신되는지 확인.
+
+---
+
+## 2026-08-12 — 검색 input 기본 clear 숨김
+
+### 한 일
+- `type="search"` WebKit/Blink 기본 ✕(`::-webkit-search-cancel-button`)를 globals.css에서 숨김.
+- MapSearchBar·AddressSearchModal의 커스텀 지우기/닫기 버튼만 유지.
+
+### 결정
+- 커스텀 clear 유지(결과·카테고리까지 clearQuery로 정리). native는 UI 중복·브라우저별 차이로 제거.
+
+### 다음
+- 모바일/데스크톱에서 검색어 입력 시 ✕가 하나만 보이는지 확인.
+
+---
+
+## 2026-08-12 — compact UI: md: 폭 충돌 제거 (가로 폰)
+
+### 한 일
+- 앱/웹 크롬을 Tailwind `md:`가 아니라 `useCompactLayout`(터치1차 또는 ≤767)만으로 게이트.
+- AppShell: 사이드 패널·목록 토글·MobileStationSheet 마운트를 `isCompact`로 분리. `data-layout` 표기.
+- MobileBottomNav / MobileStationSheet: `md:hidden` 제거.
+- MapView FAB·상세 카드 위치: `md:bottom-4` 대신 compact면 시트 offset 유지.
+
+### 결정
+- 가로 금지 없음. 폰 가로는 터치1차 → compact 유지(앱 UI).
+- 동일 크롬을 `md:`로 다시 가리지 않음(폭≥768에서 네비/시트 사라지던 버그).
+
+### 다음
+- 실기기 폰 가로: 하단 네비·시트·FAB가 앱 UI로 남는지 확인. 태블릿 웹 분기(폭 임계)는 추후.
+
+---
+
+## 2026-08-12 — compact: 폭 ≥900이면 웹 UI
+
+### 한 일
+- `useCompactLayout`: `min-width: 900px` → 항상 desktop(웹). 그다음 터치1차 → compact, 그외 ≤767 → compact.
+- Fold8 펼침(~816)은 900 미만이라 앱 UI 유지. iPad 등 넓은 터치는 웹.
+
+### 결정
+- 넓은 화면이면 앱 UI(하단 네비·시트) 의미 적음 → 폭 우선. 가로 금지는 계속 없음.
+
+### 다음
+- 태블릿 가로·폰 가로·Fold 펼침에서 앱/웹 전환 확인.
+
+
+## 2026-08-12 — places PlaceResult 업종·주차 필드
+
+### 한 일
+- PlaceResult에 middleBizName / lowerBizName / parkFlag(optional) 추가.
+- client._normalize_pois: TMAP 원본 매핑 + _clean_biz_name(기타→null) / _parse_park_flag.
+- services._to_place_results에 동일 필드 전달 (optional이라 필터에서 제외하지 않음).
+
+### 결정
+- 업종 표시 우선순위: lower → middle. parkFlag는 true일 때만 UI 표시(false/null 침묵).
+- search·around 공통 normalize.
+
+### 다음
+- FE TmapPlaceResult 타입 반영됨. PlaceSummaryBar·destination에 업종/주차 뱃지 표시.
+
+## 2026-08-12 — places 업종·주차 FE 요약바 연동
+
+### 한 일
+- RouteDestination / TmapPlaceResult에 middleBizName·lowerBizName·parkFlag.
+- PlaceCategoryMarkers·MapSearchBar 선택 시 destination에 전달.
+- PlaceSummaryBar: lower→middle 업종 라벨, parkFlag true만 «주차 가능».
+
+### 결정
+- 없으면 행 생략. 긴 상호 line-clamp는 미적용(추후 선택).
+
+### 다음
+- 실기기에서 카테고리/검색 선택 시 업종·주차 표시 확인.
+
+## 2026-08-12 — 도착지「이 주변 충전소」지도 칩
+
+### 한 일
+- \DestinationNearbyChip\: 검색 도착 핀(preview)일 때 지도 상단 중앙에 「이 주변 충전소」칩. PlaceSummaryBar「주변」과 동일 로직(\stationsAnchor\ source=destination).
+- AppShell: 「이 주변 충전소」+「주변 탐색하기」세로 스택(gap-2). 카드「주변」버튼은 유지.
+- 공통 헬퍼 \lib/map/queryNearbyStations.ts\ (\queryNearbyStationsAt\).
+- 현위치 버튼: destination·map 앵커 모두 해제 → GPS 기준 목록/마커 복귀(도착지 카드는 유지, 칩으로 재조회 가능).
+
+### 결정
+- 「주변 탐색하기」(map pan)와 「이 주변 충전소」(도착지 고정)는 별 기능·별 라벨. 같은 슬롯에 세로로 쌓음.
+- 카드「주변」은 보조 진입으로 유지.
+
+### 다음
+- 실기기: 검색 선택 → 상단 칩·카드「주변」→ 목록/마커 → 현위치 → GPS 복귀 → 칩 재탭 확인. 멀리 팬 시 「주변 탐색하기」와 동시 노출 확인.
+
+## 2026-08-12 — 메뉴 UI 껍데기 (즐겨찾기·차량·마이페이지)
+
+### 한 일
+- FavoritesPanel: 목록/추가 탭. 목록은 StationList형 빈 상태+행 미리보기. 추가는 전용 검색창 + DB(stat_id·memo) 입력 폼(기능 미연결).
+- CarPanel: 기종 콤보(car_models 껍데기) + 「포트 덮어쓰기」버튼(끄면 기종 기본 포트). 기존 임시 포트 테스트 UI 유지.
+- MyPagePanel 신규: 회원 정보 수정/삭제 폼, AddressSearchModal 재사용, 주요 메뉴 바로가기, 주변조회·날씨조회 버튼 껍데기.
+- IconRail/하단내비 라벨 「설정」→「마이페이지」. AppShell·MobileStationSheet에 패널 연결.
+
+### 결정
+- API·저장 로직은 붙이지 않음. NavId는 settings 유지(라벨만 변경).
+- 즐겨찾기 검색은 MapSearchBar와 분리한 전용 입력 껍데기.
+
+### 다음
+- favorites/cars/auth 회원수정 API 연동. 기종 콤보에 car_models 목록 fetch.
+
+## 2026-08-12 — 포인트 패널 mockup
+
+### 한 일
+- PointsPanel: 현재 잔액(authStore.pointsBalance), 충전/사용 CTA 껍데기, point_transactions형 사용 내역 mock 리스트.
+- AppShell·MobileStationSheet points 탭에 연결 (UnimplementedHint 제거).
+
+### 결정
+- 내역은 하드코딩 mock. 충전·사용 버튼은 no-op.
+
+### 다음
+- point_wallets / point_transactions / payments API 연동.
+
+## 2026-08-12 — 카테고리 POI 업종 칩 라벨 폴백
+
+### 한 일
+- around API는 middle/lowerBizName 미제공. PlaceCategoryMarkers pickPlace에서 둘 다 없으면 PLACE_CATEGORY_CHIPS 라벨(음식점·카페 등)을 middleBizName으로 넣음.
+- placeCategoryLabel 헬퍼 추가.
+
+### 결정
+- 추가 TMAP 호출 없음. 키워드 검색(통합) 값은 그대로 우선.
+
+### 다음
+- 실기기: 카테고리 마커 탭 시 PlaceSummaryBar에 칩 라벨 표시 확인.

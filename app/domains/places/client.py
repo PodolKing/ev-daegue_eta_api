@@ -7,6 +7,30 @@ TMAP_URL = "https://apis.openapi.sk.com/tmap/pois"
 TMAP_AROUND_URL = "https://apis.openapi.sk.com/tmap/pois/search/around"
 
 
+def _clean_biz_name(value: object) -> str | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s or s == "기타":
+        return None
+    return s
+
+
+def _parse_park_flag(value: object) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in ("", "null", "none"):
+        return None
+    if s in ("1", "y", "true"):
+        return True
+    if s in ("0", "n", "false"):
+        return False
+    return None
+
+
 def _normalize_pois(data: dict) -> list[dict]:
     pois = (
         data.get("searchPoiInfo", {})
@@ -34,6 +58,9 @@ def _normalize_pois(data: dict) -> list[dict]:
             ),
             "lat": poi.get("noorLat"),
             "lng": poi.get("noorLon"),
+            "middleBizName": _clean_biz_name(poi.get("middleBizName")),
+            "lowerBizName": _clean_biz_name(poi.get("lowerBizName")),
+            "parkFlag": _parse_park_flag(poi.get("parkFlag")),
         }
         for poi in pois
     ]

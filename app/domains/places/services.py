@@ -10,6 +10,9 @@ def _to_place_results(results: list[dict]) -> list[PlaceResult]:
             address=item["address"] or "",
             lat=float(item["lat"]),
             lng=float(item["lng"]),
+            middleBizName=item.get("middleBizName"),
+            lowerBizName=item.get("lowerBizName"),
+            parkFlag=item.get("parkFlag"),
         )
         for item in results
         if item.get("id") is not None
