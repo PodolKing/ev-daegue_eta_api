@@ -6,12 +6,12 @@ from app.domains.auth.models import User
 
 from . import service as favorites_service
 from .schema import (
+    FavoriteAddRequest,
     FavoriteItem,
     FavoriteListResponse,
     FavoriteMutationResponse,
     FavoriteSort,
     FavoriteStatusResponse,
-    FavoriteToggleRequest,
 )
 
 
@@ -55,17 +55,32 @@ def status(
     )
 
 
-def toggle(
+def add(
     db: Session | None,
     user: User,
-    body: FavoriteToggleRequest,
+    body: FavoriteAddRequest,
 ) -> FavoriteMutationResponse:
-    """즐겨찾기 등록/해제 토글."""
+    """즐겨찾기 등록."""
     session = _require_db(db)
-    result = favorites_service.toggle_favorite(
+    result = favorites_service.add_favorite(
         session,
         user_pk=int(user.id),
         station_id=body.station_id,
         memo=body.memo,
+    )
+    return FavoriteMutationResponse.model_validate(result)
+
+
+def remove(
+    db: Session | None,
+    user: User,
+    station_id: str,
+) -> FavoriteMutationResponse:
+    """즐겨찾기 해제."""
+    session = _require_db(db)
+    result = favorites_service.remove_favorite(
+        session,
+        user_pk=int(user.id),
+        station_id=station_id,
     )
     return FavoriteMutationResponse.model_validate(result)

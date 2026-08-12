@@ -32,3 +32,5 @@ watchfiles==1.2.0
 websockets==16.1.1
 Authlib==1.6.5
 itsdangerous==2.2.0
+portone-server-sdk==0.21.0
+

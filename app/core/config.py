@@ -125,6 +125,13 @@ class Settings(BaseSettings):
     naver_client_secret: str = ""
     naver_redirect_uri: str = "http://localhost:8000/api/v1/auth/naver/callback"
 
+    # PortOne V2 (포인트 충전)
+    portone_api_secret: str = ""
+    portone_webhook_secret: str = ""
+    portone_store_id: str = ""
+    portone_channel_key: str = ""
+
+
     @property
     def sqlalchemy_database_url(self) -> str:
         if self.database_url:

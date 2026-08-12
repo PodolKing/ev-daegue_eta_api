@@ -7,15 +7,15 @@ from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class FavoriteToggleRequest(CamelModel):
-    """별 마크 클릭 시 등록/해제할 충전소."""
+class FavoriteAddRequest(CamelModel):
+    """즐겨찾기 등록 요청."""
 
     station_id: str = Field(min_length=1, max_length=20)
     memo: str | None = Field(default=None, max_length=100)
 
 
 class FavoriteMutationResponse(CamelModel):
-    """토글 결과. 10개 제한은 오류 대신 processed=false로 반환한다."""
+    """등록/해제 결과. 10개 제한은 오류 대신 processed=false로 반환한다."""
 
     processed: bool
     is_favorite: bool

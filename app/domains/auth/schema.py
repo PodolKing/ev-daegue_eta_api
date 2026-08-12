@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from pydantic import Field
+
 from app.schemas.base import CamelModel
 
 
@@ -20,6 +22,14 @@ class SignupRequest(CamelModel):
 class LoginRequest(CamelModel):
     user_id: str
     password: str
+
+
+class UpdateProfileRequest(CamelModel):
+    """회원 정보 수정 — 닉네임·주소(상세 포함). 보낸 필드만 갱신."""
+
+    nickname: str | None = Field(default=None, min_length=1, max_length=30)
+    address: str | None = Field(default=None, max_length=255)
+    detail_address: str | None = Field(default=None, max_length=255)
 
 
 class UserPublic(CamelModel):
@@ -57,3 +67,14 @@ class LoginResponse(CamelModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+class UpdateProfileResponse(CamelModel):
+    success: bool = True
+    message: str = "회원 정보가 수정되었습니다"
+    user: UserPublic
+
+
+class WithdrawResponse(CamelModel):
+    success: bool = True
+    message: str = "회원 탈퇴가 완료되었습니다"
