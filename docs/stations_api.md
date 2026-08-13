@@ -96,3 +96,42 @@ Top-level item = **station** (`stat_id` aggregate). Nested `chargers[]` = **one 
 - Exclude rows with null `lat`/`lng`.
 - Sort by `distanceKm` ascending.
 - Full table dump (~25k) is forbidden.
+
+## GET /api/v1/stations/search
+
+즐겨찾기 추가 탭 등. **기존 GET /stations(lat/lng/radius)와 별도.** 지도 목록 계약은 변경하지 않음.
+
+### Query
+
+| Param | Type | Default | Max | Notes |
+|---|---|---|---|---|
+| `q` | string | required | 100 | 충전소명·주소 contains. **2자 이상**(trim 후 미달이면 items=[]). LIKE 와일드카드 `%` `_` 는 제거 |
+| `limit` | int | `20` | `30` | 전체 dump 금지 |
+
+`stat_nm` / `addr` / `addr_detail` 매칭. `stat_id` 집계. 좌표 null 제외. 이름순.
+
+### Response (camelCase)
+
+충전기 배열 없음. 요약만.
+
+```json
+{
+  "items": [
+    {
+      "stationId": "ST001",
+      "name": "대구시청 공영주차장",
+      "address": "대구광역시 …",
+      "lat": 35.8714,
+      "lng": 128.6014,
+      "availableCount": 2
+    }
+  ],
+  "query": "시청",
+  "limit": 20,
+  "count": 1
+}
+```
+
+`availableCount`: stations와 동일. 관측 없으면 **null**(0과 구분). `charger_status=2` 대수.
+
+FE: `GET {API}/api/v1/stations/search?q=동성로&limit=20` 후 선택 `stationId`를 `POST /favorites/toggle`에 넘긴다. TMAP places 검색과 혼용하지 않음.

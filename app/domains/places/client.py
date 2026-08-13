@@ -82,7 +82,7 @@ async def fetch_tmap_places(
     params: dict[str, str | int | float] = {
         "version": "1",
         "searchKeyword": keyword,
-        "count": 10,
+        "count": 15,
     }
 
     # 위치 정보 및 반경 값이 전달되었을 경우 Tmap 위치 기준 검색 파라미터 추가

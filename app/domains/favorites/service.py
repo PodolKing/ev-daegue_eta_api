@@ -201,6 +201,12 @@ def _nullable_float(value: object) -> float | None:
     return float(value)  # type: ignore[arg-type]
 
 
+def _nullable_int(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
 def list_favorites(
     db: Session,
     *,
@@ -210,6 +216,7 @@ def list_favorites(
     """
     내 즐겨찾기 충전소 전체 조회.
     ev_charger_info의 충전기별 행을 stat_id 단위로 집계한다.
+    available_count는 stations와 동일: 상태 관측 없으면 null, 있으면 status=2 대수.
     """
     order_sql = (
         "COALESCE(MAX(i.stat_nm), '') ASC, f.id DESC"
@@ -227,11 +234,28 @@ def list_favorites(
                 MAX(i.lat) AS lat,
                 MAX(i.lng) AS lng,
                 f.memo,
+                CASE
+                    WHEN SUM(
+                        CASE
+                            WHEN s.charger_status IN ('1','2','3','4','5','9')
+                            THEN 1 ELSE 0
+                        END
+                    ) = 0 THEN NULL
+                    ELSE SUM(
+                        CASE
+                            WHEN s.charger_status = '2'
+                            THEN 1 ELSE 0
+                        END
+                    )
+                END AS available_count,
                 f.created_at,
                 f.last_used_at
             FROM user_favorite_chargers AS f
             LEFT JOIN ev_charger_info AS i
               ON i.stat_id = f.stat_id
+            LEFT JOIN ev_charger_status AS s
+              ON i.stat_id = s.stat_id
+             AND i.chger_id = s.chger_id
             WHERE f.user_id = :user_pk
             GROUP BY
                 f.id,
@@ -254,6 +278,7 @@ def list_favorites(
             "lat": _nullable_float(row["lat"]),
             "lng": _nullable_float(row["lng"]),
             "memo": row["memo"],
+            "available_count": _nullable_int(row["available_count"]),
             "created_at": row["created_at"],
             "last_used_at": row["last_used_at"],
         }

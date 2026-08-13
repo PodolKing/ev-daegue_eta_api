@@ -2441,3 +2441,281 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 
 ### 다음
 - 실기기: 카테고리 마커 탭 시 PlaceSummaryBar에 칩 라벨 표시 확인.
+
+## 2026-08-12 — 충전소 마커 숫자 콜아웃(팁 앵커)
+
+### 한 일
+- \lib/tmap/stationCalloutMarker.ts\: 원형 canvas 마커 → 둥근 사각 + 아래 팁 SVG 콜아웃. 가용 숫자 강조, \/총\ 유지. 앵커=팁 끝.
+- \StationMarkers\만 교체. 카테고리 핀·현위치·도착·RecommendMarkers 원형 유지.
+
+### 결정
+- 총대수 표기 유지(피드백은 가독성). 겹침은 완전 해소가 아니라 위치·숫자 가시성 완화 목적.
+- 되돌리기 쉬운 시안 — 아이콘 생성만 분리.
+
+### 다음
+- 실기기에서 \8/12\ 가독·선택 스트로크·밀집 구간 체감 확인. 마음에 안 들면 원형으로 롤백.
+
+## 2026-08-12 — 충전소 마커 겹침 cascade 시안 (아래 밀기)
+
+### 한 일
+- \lib/map/stationMarkerCascade.ts\: 화면상 근접 충전소를 그룹으로 묶어 슬롯마다 남쪽(아래)으로 표시 좌표만 오프셋. 탭 hit는 실제 lat/lng 유지.
+- \StationMarkers\: 줌·선택 변경 시 cascade 재적용. 선택 충전소는 그룹 내 slot 0(원래 자리). zIndex 미의존.
+
+### 결정
+- SDK/MapView/RadiusControl 미변경. 테스트 시안 — 체감 안 좋으면 cascade만 제거.
+
+### 다음
+- 실기기 밀집 구간·줌인아웃·선택 시 자리 복귀 확인.
+
+## 2026-08-12 — 겹침 시안: 위치 cascade → 팁 상하 플립
+
+### 한 일
+- 의도 정정: 좌표를 아래로 밀지 않고, 콜아웃 화살(팁)을 위/아래로 뒤집어 몸통을 양쪽으로 나눔.
+- \stationCalloutMarker\: tipDirection down|up. 겹친 페어는 하나 위·하나 아래. 좌표는 실제 lat/lng 유지.
+
+### 결정
+- zIndex/위치 오프셋 시안은 의도 아님. 2개 겹침에 유효, 3개+는 같은 방향끼리 다시 겹칠 수 있음.
+
+### 다음
+- 실기기에서 페어 겹침 구간 확인.
+
+## 2026-08-12 — 겹침: 아래층(낮은 z)만 팁 플립
+
+### 한 일
+- \calloutStackLayout\: 겹침 그룹에서 위층(선택 우선)=tip↓ + z 70/80, 가려진 쪽=tip↑ + z 50↓.
+- StationMarkers에서 setIcon과 함께 setZIndex 적용.
+
+### 결정
+- 클릭/가독이 막히는 아래층이 뒤집히도록. 좌표는 실제 lat/lng 유지.
+
+### 다음
+- 실기기 페어 겹침에서 아래 마커 탭·숫자 확인.
+
+## 2026-08-12 — 겹침: 팁 플립 폐기 → 표시좌표 cascade
+
+### 한 일
+- 팁 상하 뒤집기 제거(콜아웃은 항상 tip↓). 목표를 「안 겹침」으로 정정.
+- \cascadeMarkerLayout\: 근접 그룹에서 선택/위층은 제자리, 나머지는 화면 ~40px만큼 남쪽으로 표시만 이동. 탭 hit는 실제 lat/lng.
+
+### 결정
+- 뒤집으면 몸통이 반대로 붙으며 오히려 겹쳐 보임. declutter는 위치 오프셋.
+
+### 다음
+- 실기기 밀집 구간에서 세로로 벌어지는지·선택 시 제자리 복귀 확인.
+
+## 2026-08-12 — cascade: 선택 시 자리 고정
+
+### 한 일
+- cascade 슬롯은 stationId 고정 정렬. 선택은 icon/zIndex만(자리 재배치 없음).
+- 위치 sync는 list·줌만. 클릭으로 마커가 우르르 움직이지 않게.
+
+### 결정
+- 목표=그려질 때 안 겹침. 클릭 이동은 부작용이라 제거.
+
+### 다음
+- 실기기: 최초 표시에서 세로 분리·탭 시 자리 유지 확인.
+
+## 2026-08-12 — 충전 결제·포인트 정리 문서
+
+### 한 일
+- 워크스페이스 루트에 `payment.md` 신설 (기존 payment 전용 문서 없음).
+- 컨셉(포인트 대행·회원가 기준 데모), 기존 지갑 3테이블, 요금표, 예정 `usage_orders`/`partners`, kWh UX, 실연동 방향을 표로 정리.
+
+### 결정
+- 요금표 참고와 포인트 대행 레이어 분리. 가짜 제휴로 자격 흉내 내지 않음.
+- 토이 대행 단가 = 요금표 회원가 × 사용자 kWh(칩+수동). 실세션·상용 정산 제외.
+
+### 다음
+- 요금 표시·지갑 API·usage_orders 는 각각 BE 승인 후 구현.
+
+## 2026-08-12 — payment.md 대표가·매칭·가용 기 보강
+
+### 한 일
+- `payment.md`에 단가 매칭(busiId+output), DetailCard 비회원 대표가, 회사 vs 충전소 대표가, 가용 chargers(status=2)·FE만, 포트별 가격 비표시를 반영.
+
+### 결정
+- 충전소 대표가 = 가용 max output 밴드 비회원가. 회사 목록 = default_rate 또는 min~max (완속/최저가 단독 ❌).
+
+### 다음
+- 요금 API·DetailCard 표시는 BE 승인 후.
+
+## 2026-08-12 — payment.md 기존 3테이블 검토 + 신규 DDL 부록
+
+### 한 일
+- `payment.md` §2.0: `point_wallets` / `point_transactions` / `payments`는 usage_orders·요금 대행을 위해 **ALTER 불필요**로 확정 (`ref_type=usage_order` 자리 기존 확보).
+- §4.1 구현 규칙 반영: confirm 3중 원자성·잔액부족=롤백(failed 없음)·kWh CHECK·points_spent 단일 함수·idempotency=confirm 전용.
+- §10 DDL 부록: `ev_operator_tariffs`(CSV 기준), `usage_orders`, `partners`(1차 주석·미적용).
+
+### 결정
+- 기존 지갑 3테이블 스키마 수정 없음. 제휴 컬럼/affiliations 추가 없음. `ev_charger_status` 데모 변조 금지.
+- 신규 생성 순서: 요금표 → (지갑 API) → usage_orders. partners는 제휴 확정 전 생략.
+
+### 다음
+- DB 승인 후 §10 DDL 적용 + CSV import. usage_orders API는 BE 승인 후.
+
+## 2026-08-12 — payment DDL MariaDB + PostgreSQL 이중본
+
+### 한 일
+- `docs/data/payment_ddl_postgresql.sql`, `docs/data/payment_ddl_mariadb.sql` 신설 (요금표+usage_orders+partners주석).
+- `payment.md` §10에 두 방언 전문·차이표 반영. 기존 지갑 3테이블 ALTER 없음 유지.
+
+### 결정
+- Supabase(Postgres)가 주 타깃이어도 MariaDB 사본을 문서/파일로 유지 (이관·로컬 대비).
+
+### 다음
+- 실제 적용 DB 선택 후 해당 파일만 실행 + CSV import.
+
+## 2026-08-12 — 요금 폴백 센티널 __AVG__ CSV 반영
+
+### 한 일
+- `ev_operator_tariffs_import.csv`에 `busi_id=__AVG__` member/non_member 2행 추가 (밴드 median, 224행).
+- `build_ev_operator_tariffs_import.py`에 센티널 자동 주입. `payment.md` §3.1.1~3.1.2 조회·관리·DDL 주의 추가.
+- DDL 주석: FK 금지, `__DEFAULT__`(11자) 대신 `__AVG__`(7자).
+
+### 결정
+- 매칭 실패·busi_id null → `__AVG__` 폴백. UI는 추정·평균 기본가. 요금 정본은 CSV.
+
+### 다음
+- DB import 시 센티널 포함 재적재. 조회 로직에 폴백 순서 구현(BE 승인 후).
+
+## 2026-08-12 — cascade 파라미터 완화 (원 밖 과도 밀림)
+
+### 한 일
+- \stationMarkerCascade.ts\: COLLIDE_PX 96→56, MIN_COLLIDE_M 90→45, STEP_PX 44→28, MAX_SLOT 8→3.
+- 표시좌표만 남쪽 밀기 유지. 탭 hit는 실제 lat/lng 그대로.
+
+### 결정
+- 줌15 기준 충돌·슬롯 밀림이 반경 원 밖으로 과하게 나가 체감이 나쁨 → 내일 실기기 재테스트용 완화.
+
+### 다음
+- 밀집 구간에서 겹침·원 밖 이탈 체감 확인. 더 세면 추가 완화 또는 cascade 제거.
+
+## 2026-08-13 — 회원 메뉴 UI 게이트·카피 정리
+
+### 한 일
+- 즐겨찾기·내 차량·포인트 패널: 비로그인 시 상단 배너 + 메뉴 열람 유지. 등록/충전 버튼은 비활성.
+- 목록·상세 ★: 비로그인이면 별 미채움, 「즐겨찾기 기능은 로그인 시 제공됩니다」 시트.
+- 포인트 mockup에서 balance·테이블명 등 DB 용어 제거. 마이페이지 회원번호 필드 삭제.
+- 즐겨찾기·차량 폼의 DB 컬럼 안내 문구 제거.
+
+### 결정
+- 패널 진입은 막지 않고 위 안내만. 저장 순간에 창을 띄우지 않음(버튼 비활성).
+- 지도/충전소 ★만 탭 시 로그인 시트.
+
+### 다음
+- favorites/cars API 연동. 로그인 후 배너 숨김·★ 토글 서버 반영 확인.
+
+## 2026-08-13 — AI 추천 후 일반 목록 메뉴 접기
+
+### 한 일
+- AppShell: recommendActive가 되면 데스크톱 목록 패널 닫기, 모바일 시트 peek, nav는 map.
+- AI 추천 목록과 StationList가 동시에 보이지 않게.
+
+### 결정
+- 추천 시작(패널 등장) 시점에 접음. 추천 종료 후 자동 재펼침은 없음.
+
+### 다음
+- 실기기에서 AI 추천 탭 → 일반 목록이 접히고 추천 목록만 남는지 확인.
+
+## 2026-08-13 — 즐겨찾기 가용대수 + 시트 모달 포탈
+
+### 한 일
+- GET /favorites/list에 availableCount 추가. ev_charger_status JOIN, stations와 동일(관측 없으면 null, 있으면 charger_status=2 대수). 반경과 무관.
+- 즐겨찾기 목록 행에 그 수를 표시.
+- LoginBottomSheet·AddressSearchModal을 document.body 포탈. 모바일 시트(transform) 안에서 열어도 회색 오버레이가 시트에 갇히지 않음.
+
+### 결정
+- 찜 가용은 mapStore 반경 합치기가 아니라 list API 필드. 대구 서비스 범위의 충전소면 카메라 밖이어도 숫자.
+- 모달 UI는 유지하고 마운트만 body. TMAP 잠금 파일 미수정.
+
+### 다음
+- 로그인 후 즐겨찾기 탭에서 반경 밖 찜도 가용 숫자가 보이는지 확인.
+- 모바일 시트에서 ★(비로그인)·마이페이지 주소 검색 시 닫기/로그인이 화면 안에 보이는지 확인.
+- 즐겨찾기 추가 탭 검색 연동.
+
+## 2026-08-13 — 즐겨찾기 ★ 등록 연동 (현황)
+
+### 한 일
+- 목록·상세 ★ → 로그인 게이트 → POST /api/v1/favorites/toggle → favoriteStore hydrate.
+- 즐겨찾기 목록 탭은 저장된 충전소 표시(availableCount 포함).
+- 「추가」탭 UI(검색창·선택·메모·제출)는 유지. 검색·제출은 아직 미연결.
+
+### 결정
+- 지도에서 ★로 찜하는 1차 등록은 완료로 본다.
+- 지도 장소검색(MapSearchBar / TMAP POI)과 즐겨찾기 추가 탭 검색은 별개. 찜은 stationId가 필요해서 POI로 대체하지 않음.
+- 반경 목록(mapStore.stations) 클라이언트 필터만으로는 추가 탭 검색으로 쓰지 않음.
+
+### 다음
+- 즐겨찾기 추가 탭: 충전소 이름/주소 검색 → 선택 → 메모 → toggleFavorite.
+- 검색 API는 GET /api/v1/stations/search (q 2자+, limit, stat_id 집계). 기존 GET /stations(lat/lng/radius)는 유지. BE 작업 전 승인 필요.
+- MapSearchBar·TMAP 잠금 파일(loadSdk / MapView bootstrap / RadiusControl) 수정하지 않음.
+
+## 2026-08-13 — 충전소 키워드 검색 API
+
+### 한 일
+- GET /api/v1/stations/search 추가. q(2자+)·limit(기본 20/최대 30). stat_nm·addr·addr_detail contains, stat_id 집계.
+- 응답 요약만: stationId, name, address, lat, lng, availableCount. chargers[] 없음.
+- 기존 GET /stations(lat/lng/radius) 계약 유지. FE 미연결(추가 탭은 프론트에서 붙임).
+- stations_api.md (api/docs · web/docs)에 엔드포인트 문서 추가.
+
+### 결정
+- 반경 목록에 q를 섞지 않고 /search 분리. 전체 dump 금지.
+- 지도 장소검색(TMAP places)과 혼용하지 않음. 찜은 stationId.
+
+### 다음
+- FE 즐겨찾기 추가 탭: search → 선택 → 메모 → toggleFavorite.
+- OpenAPI /docs에서 /stations/search 확인. q=시청 등 로컬 조회.
+
+## 2026-08-13 — 즐겨찾기 추가 탭 검색 연결 + draft 유지
+
+### 한 일
+- FavoritesAddShell: searchStations 디바운스 → 선택 → memo → toggleFavorite. 성공 시 목록 탭.
+- 비로그인 추가 버튼 라벨「로그인 후 추가」+ 안내. 미선택 시「검색에서 충전소를 선택하세요」.
+- addDraft·addTab을 favoriteStore에 둠. 목록/추가 탭·다른 메뉴를 다녀와도 추가 성공 전까지 유지.
+- 검색「초기화」버튼: query·결과·선택 비움(메모는 유지). 추가 성공·로그아웃 시 draft 전체 비움.
+
+### 결정
+- 추가 성공 전 draft 유지. 지도 검색(MapSearchBar)과 분리. TMAP 잠금 파일 미수정.
+
+### 다음
+- 로그인 후 추가 탭에서 검색→선택→추가→목록·★ 확인. 탭/메뉴 이동 후 draft 유지·초기화 확인.
+
+## 2026-08-13 — 지도 장소검색 대구 우선(제거 없음)
+
+### 한 일
+- searchTmapPlaces: 지도 center가 있으면 lat/lng를 BE에 전달. radius는 안 보냄(타 지역 미절단).
+- 응답 10개를 재정렬: 주소·이름에 「대구」가 있으면 위, 없으면 아래. 그룹 안 TMAP 순서 유지.
+
+### 결정
+- 대구만 남기는 필터 아님. 개수 10 유지. MapView/loadSdk/RadiusControl 미수정.
+
+### 다음
+- 「시청」검색 시 대구 결과가 위에 오는지, 「강남」은 서울이 그대로 나오는지 확인.
+
+## 2026-08-13 — 내 차량 API 연동 (FE)
+
+### 한 일
+- CarPanel: GET /models 콤보, POST /createCar, 목록·대표·삭제. 로그인 시 폼, 비로그인은 임시 포트만.
+- 로그인 hydrate에 cars 포함. logout/clear 시 carStore clear.
+- 400 응답은 FastAPI detail 문자열을 alert에 사용.
+
+### 결정
+- 차량 내용 수정 PATCH는 1차 제외. 잘못 등록하면 삭제 후 재등록.
+- API model → FE carModel 매핑. 커스텀 기종은 포트 필수 UI.
+
+### 다음
+- 실기기: 로그인 → 기종 선택 → 저장 → 새로고침 후 목록 유지. 대표/삭제 확인.
+
+## 2026-08-13 — 충전 포트 SVG 시안
+
+### 한 일
+- 원본 포트 글리프 3장: `web/public/car/ports/{ccs,chademo,nacs}.svg` (공식 도면 아님, 핀 배치 단순화).
+- CarPanel 포트 선택·목록·임시 포트 버튼에 표시. CCS는 한국에서 익숙한 Combo 2 실루엣.
+- 차량 가오용 생성 사진 1장 시안: `web/public/car/ev-generic.png` (빈 목록에만, 교체 가능).
+
+### 결정
+- 포트는 AI 생성 대신 직접 SVG. 차 사진은 시안 — 외부 에셋으로 바꿔도 경로만 유지.
+
+### 다음
+- 내 차량에서 포트 3종 구분 확인. 차 사진 유지/교체 결정.
+

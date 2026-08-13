@@ -41,6 +41,10 @@ class FavoriteItem(CamelModel):
     lat: float | None = None
     lng: float | None = None
     memo: str | None = None
+    available_count: int | None = Field(
+        default=None,
+        description="관측 없으면 null(0과 구분). charger_status=2 대수. stations와 동일.",
+    )
     created_at: datetime
     last_used_at: datetime
 
