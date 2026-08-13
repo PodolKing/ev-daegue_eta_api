@@ -9,6 +9,9 @@ DEFAULT_RADIUS_KM = 3.0
 MAX_RADIUS_KM = 10.0
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
+SEARCH_MIN_Q_LEN = 2
+SEARCH_DEFAULT_LIMIT = 20
+SEARCH_MAX_LIMIT = 30
 
 def clamp_radius_km(radius_km: float) -> float:
     return max(0.1, min(radius_km, MAX_RADIUS_KM))
@@ -16,6 +19,16 @@ def clamp_radius_km(radius_km: float) -> float:
 
 def clamp_limit(limit: int) -> int:
     return max(1, min(limit, MAX_LIMIT))
+
+
+def clamp_search_limit(limit: int) -> int:
+    return max(1, min(limit, SEARCH_MAX_LIMIT))
+
+
+def _like_contains(q: str) -> str:
+    """사용자 입력의 LIKE 와일드카드는 제거. 전체 dump 방지용 contains."""
+    cleaned = q.replace("\\", "").replace("%", "").replace("_", "").strip()
+    return f"%{cleaned}%"
 
 
 def _as_float(value: object) -> float:
@@ -596,3 +609,89 @@ def list_stations_viewport(
     ).mappings().all()
 
     return [_station_row(row) for row in rows]
+
+
+_AVAIL_COUNT_SQL = """
+            CASE
+                WHEN SUM(
+                    CASE
+                        WHEN s.charger_status IN ('1','2','3','4','5','9')
+                        THEN 1 ELSE 0
+                    END
+                ) = 0 THEN NULL
+                ELSE SUM(
+                    CASE
+                        WHEN s.charger_status = '2'
+                        THEN 1 ELSE 0
+                    END
+                )
+            END AS available_count
+"""
+
+
+def search_stations(
+    db: Session,
+    *,
+    q: str,
+    limit: int = SEARCH_DEFAULT_LIMIT,
+) -> list[dict]:
+    """
+    충전소명·주소 키워드 검색. stat_id 집계.
+    반경 API와 분리. 전체 테이블 dump 없음 (q 최소 길이 + limit).
+    """
+    query = q.strip()
+    limit = clamp_search_limit(limit)
+    if len(query) < SEARCH_MIN_Q_LEN:
+        return []
+
+    pattern = _like_contains(query)
+    if pattern == "%%":
+        return []
+
+    dialect = db.get_bind().dialect.name
+    like_op = "ILIKE" if dialect == "postgresql" else "LIKE"
+
+    sql = text(
+        f"""
+        SELECT
+            i.stat_id AS station_id,
+            MAX(i.stat_nm) AS name,
+            MAX(i.addr) AS address,
+            MAX(i.lat) AS lat,
+            MAX(i.lng) AS lng,
+{_AVAIL_COUNT_SQL}
+        FROM ev_charger_info AS i
+        LEFT JOIN ev_charger_status AS s
+            ON i.stat_id = s.stat_id
+           AND i.chger_id = s.chger_id
+        WHERE i.lat IS NOT NULL
+          AND i.lng IS NOT NULL
+          AND (
+                i.stat_nm {like_op} :pattern
+             OR i.addr {like_op} :pattern
+             OR i.addr_detail {like_op} :pattern
+          )
+        GROUP BY i.stat_id
+        ORDER BY MAX(i.stat_nm) ASC, i.stat_id ASC
+        LIMIT :limit
+        """
+    )
+
+    rows = db.execute(sql, {"pattern": pattern, "limit": limit}).mappings().all()
+
+    out: list[dict] = []
+    for row in rows:
+        if row["lat"] is None or row["lng"] is None:
+            continue
+        out.append(
+            {
+                "station_id": row["station_id"],
+                "name": _nullable_str(row["name"]),
+                "address": _nullable_str(row["address"]),
+                "lat": _as_float(row["lat"]),
+                "lng": _as_float(row["lng"]),
+                "available_count": _nullable_int(row["available_count"]),
+            }
+        )
+    return out
+

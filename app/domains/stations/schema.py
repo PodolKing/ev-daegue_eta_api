@@ -145,3 +145,22 @@ class StationListResponse(CamelModel):
     count: int
 
 
+class StationSearchItem(CamelModel):
+    """즐겨찾기 추가 탭 등 — 키워드 검색 요약. chargers[] 없음."""
+
+    station_id: str
+    name: str | None = None
+    address: str | None = None
+    lat: float
+    lng: float
+    available_count: int | None = None
+
+
+class StationSearchResponse(CamelModel):
+    items: list[StationSearchItem]
+    query: str
+    limit: int
+    count: int
+
+
+
