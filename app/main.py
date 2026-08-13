@@ -19,6 +19,7 @@ from app.domains.weather.router import router as weather_router
 from app.domains.stations.sync import _ensure_sync_logging
 from app.domains.routes.router import router as routes_router
 from app.domains.favorites.router import router as favorites_router
+from app.domains.usage_orders.router import router as usage_orders_router
 
 settings = get_settings()
 _ensure_sync_logging()
@@ -67,4 +68,5 @@ app.include_router(routes_router)
 app.include_router(history_router)
 app.include_router(admin_router)
 app.include_router(favorites_router)
+app.include_router(usage_orders_router)  # 충전 가결제·요금 정산
 
