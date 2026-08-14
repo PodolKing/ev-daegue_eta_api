@@ -2719,3 +2719,53 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 ### 다음
 - 내 차량에서 포트 3종 구분 확인. 차 사진 유지/교체 결정.
 
+
+## 2026-08-14 — 즐겨찾기 POST /toggle 복구
+
+### 한 일
+- BE `POST /api/v1/favorites/toggle` 복구. 있으면 해제, 없으면 등록. memo는 신규일 때만.
+- 10개 한도는 기존대로 HTTP 200 + `processed: false` (`FAVORITE_LIMIT_REACHED`).
+- 명시적 `POST /favorites`, `DELETE /favorites/{stationId}`는 유지. FE 별 버튼·추가 탭은 기존처럼 toggle만 호출.
+- 재발 방지: `docs/rules/08_api_http_contract.md`, `.cursor/rules/api-http-contract.mdc`.
+
+### 왜 로컬에선 되는 줄 알았나 (405 원인)
+1. **8/11** BE에 원래 `POST /toggle`이 있었다. 그때 ★는 로컬에서 정상.
+2. **8/12** 포인트 커밋에서 BE만 add(`POST /favorites`) + remove(`DELETE /{id}`)로 바꿈. FE는 `/toggle`을 그대로 호출.
+3. **8/13** FE ★ 연동은 작업 메모「list/toggle 이미 있음」을 따름. `router.py`를 다시 안 봄.
+4. `GET /favorites/list`는 그대로 200이라 **목록·로그인은 되는 것처럼** 보였다. ★를 눌러야 POST /toggle 405가 난다.
+5. 405인 이유: `/toggle` 전용 POST가 없어 FastAPI가 `DELETE /{station_id}`의 `station_id=toggle`로 경로만 맞추고, 메서드가 POST라 **Method Not Allowed**. 404가 아님.
+
+### 결정
+- ★ 클릭은 클라이언트 상태 분기(add vs delete)가 아니라 서버가 DB 보고 토글. 동시 탭은 사용자 행 잠금으로 직렬화.
+- HTTP 경로·메서드 변경은 같은 작업에서 FE 호출부를 맞추거나, 맞추기 전에 배포하지 않는다. 작업 메모는 `router.py`보다 우선하지 않는다.
+
+### 다음
+- 로컬: 로그인 후 ★ 연속 탭 → 등록/해제 반복, 목록 hydrate. 10개일 때 추가 시도 시 안내 문구.
+- Render 배포 후 운영에서도 동일 확인.
+
+## 2026-08-14 — 즐겨찾기 한도 안내 시트 (alert 제거)
+
+### 한 일
+- 10곳 초과 시 window.alert 대신 FavoriteNoticeSheet (BodyPortal 하단 시트).
+- 문구: 「즐겨찾기는 최대 10곳입니다」 / 「목록에서 하나를 해제한 뒤 다시 추가해 주세요.」
+- 처리 실패도 같은 시트. AppShell에 1회 마운트. TMAP 잠금 파일 미수정.
+
+### 결정
+- 한도는 등록 차단 + 안내만. 바꿀 항목 선택 UI는 아직 없음.
+- 시스템 alert는 모바일에서 도메인 문구·지도 정지가 나서 로그인 시트와 같은 패턴 사용.
+
+### 다음
+- 10개 채운 뒤 ★ 추가 시 시트가 지도/모바일 시트 위에 보이는지 확인.
+
+## 2026-08-14 — 즐겨찾기 ★ 낙관적 토글
+
+### 한 일
+- ★ 탭 즉시 stationIds 반영. POST /toggle·list hydrate는 뒤에서.
+- 10곳 가득이면 켜지 않고 한도 시트. 실패·한도(서버)면 별 되돌림.
+- 연속 탭은 pending으로 한 요청만. TMAP 잠금 파일 미수정.
+
+### 결정
+- 별 지연은 서버 고장보다 FE가 toggle+list를 기다린 것. 낙관적 UI가 맞음.
+
+### 다음
+- 로그인 후 ★ 탭이 즉시 채워지는지, 10개일 때 안 켜지고 시트만 뜨는지 확인.

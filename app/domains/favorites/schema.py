@@ -14,6 +14,10 @@ class FavoriteAddRequest(CamelModel):
     memo: str | None = Field(default=None, max_length=100)
 
 
+class FavoriteToggleRequest(FavoriteAddRequest):
+    """별 토글. 있으면 해제, 없으면 등록. memo는 신규 등록에만 적용."""
+
+
 class FavoriteMutationResponse(CamelModel):
     """등록/해제 결과. 10개 제한은 오류 대신 processed=false로 반환한다."""
 
