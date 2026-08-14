@@ -212,7 +212,7 @@ def request_charge(
         if status.charger_status != CHARGER_STATUS_WAIT:
             message = "충전기가 충전 대기 상태가 아닙니다"
         elif car is None:
-            message = "대표 차량이 없습니다. 차량을 등록·설정하세요"
+            message = "내 차량에서 대표 차량을 선택하면 충전 서비스를 이용할 수 있습니다"
         else:
             message = "충전 요청 가능. 가결제(한도)를 진행하세요"
 
@@ -287,7 +287,10 @@ def pre_authorize(
 
         car = _primary_car(db, user_pk=user_pk)
         if car is None:
-            raise HTTPException(status_code=400, detail="대표 차량이 없습니다")
+            raise HTTPException(
+                status_code=400,
+                detail="내 차량에서 대표 차량을 선택하면 충전 서비스를 이용할 수 있습니다",
+            )
 
         stat_key = stat_id.strip()
         chger_key = chger_id.strip()
