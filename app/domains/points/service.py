@@ -68,31 +68,47 @@ def get_balance(db: Session, *, user_pk: int) -> int:
     return int(wallet.balance)
 
 
+def _buyer_email_for_pg(user: User) -> str:
+    """이니시스 필수 buyer email. users에 email 컬럼 없음 → user_id 또는 합성값."""
+    uid = (getattr(user, "user_id", None) or "").strip()
+    if "@" in uid:
+        return uid
+    return f"user{int(user.id)}@noreply.local"
+
+
+def _buyer_name_for_pg(user: User) -> str:
+    nick = (user.nickname or "").strip()
+    return nick or f"user{int(user.id)}"
+
+
 def credit_points(
     db: Session,
     *,
-    user_pk: int,
+    admin_pk: int,
+    nickname: str,
     points: int,
     memo: str | None = None,
 ) -> dict[str, object]:
-    """
-    포트원·payments 없이 point_wallets.balance에 포인트 적립.
-    원장 type=adjust, ref_type=admin.
-    """
+    """ADMIN이 닉네임으로 대상 지갑에 적립. 원장 type=adjust, ref_id=admin pk."""
     if points < MIN_DIRECT_POINTS or points > MAX_DIRECT_POINTS:
         raise HTTPException(
             status_code=400,
             detail=f"적립 포인트는 {MIN_DIRECT_POINTS}~{MAX_DIRECT_POINTS}입니다",
         )
 
+    nick = (nickname or "").strip()
+    if not nick:
+        raise HTTPException(status_code=400, detail="닉네임은 필수입니다")
+
     try:
         user = db.execute(
-            select(User).where(User.id == user_pk).with_for_update()
+            select(User).where(User.nickname == nick).with_for_update()
         ).scalar_one_or_none()
         if user is None or not user.is_active or user.deleted_at is not None:
-            raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다")
+            raise HTTPException(status_code=404, detail="해당 닉네임의 사용자를 찾을 수 없습니다")
 
-        wallet = ensure_wallet(db, user_pk=user_pk)
+        target_pk = int(user.id)
+        wallet = ensure_wallet(db, user_pk=target_pk)
         db.refresh(wallet)
 
         now = _now()
@@ -101,15 +117,15 @@ def credit_points(
         wallet.version = int(wallet.version) + 1
         wallet.updated_at = now
 
-        note = (memo or "").strip() or "포트원 없이 포인트 적립"
+        note = (memo or "").strip() or f"관리자 충전 → {nick}"
         db.add(
             PointTransaction(
-                wallet_id=user_pk,
+                wallet_id=target_pk,
                 type=TX_TYPE_ADJUST,
                 amount=int(points),
                 balance_after=new_balance,
                 ref_type=REF_TYPE_ADMIN,
-                ref_id=None,
+                ref_id=int(admin_pk),
                 idempotency_key=f"adjust:{uuid4().hex}",
                 memo=note[:255],
                 created_at=now,
@@ -124,7 +140,8 @@ def credit_points(
             "processed": True,
             "points": int(points),
             "balance": new_balance,
-            "message": "포인트가 적립되었습니다",
+            "nickname": user.nickname,
+            "message": f"{user.nickname}에게 {int(points)}P가 적립되었습니다",
         }
     except HTTPException:
         db.rollback()
@@ -190,6 +207,8 @@ def create_charge(
         "store_id": settings.portone_store_id.strip(),
         "channel_key": settings.portone_channel_key.strip(),
         "status": payment.status,
+        "customer_email": _buyer_email_for_pg(user),
+        "customer_name": _buyer_name_for_pg(user),
     }
 
 
@@ -357,17 +376,75 @@ def complete_charge(
         ) from None
 
 
+def fail_charge(
+    db: Session,
+    *,
+    payment_id: str,
+    expect_user_pk: int,
+) -> dict[str, object]:
+    """위젯 실패·취소: pending → failed. 지갑은 변경하지 않음."""
+    payment_key = payment_id.strip()
+    if not payment_key:
+        raise HTTPException(status_code=400, detail="paymentId는 필수입니다")
+
+    try:
+        payment = _find_payment_by_payment_id(db, payment_key)
+        if payment is None:
+            raise HTTPException(status_code=404, detail="충전 주문을 찾을 수 없습니다")
+        if int(payment.user_id) != int(expect_user_pk):
+            raise HTTPException(status_code=403, detail="본인 충전 주문만 실패 처리할 수 있습니다")
+
+        if payment.status == PAYMENT_STATUS_PAID:
+            raise HTTPException(status_code=409, detail="이미 충전 완료된 주문입니다")
+
+        if payment.status == PAYMENT_STATUS_FAILED:
+            return {
+                "processed": False,
+                "payment_id": payment.idempotency_key or payment_key,
+                "status": payment.status,
+                "message": "이미 실패로 기록된 주문입니다",
+            }
+
+        if payment.status != PAYMENT_STATUS_PENDING:
+            raise HTTPException(
+                status_code=409,
+                detail=f"실패 처리할 수 없는 상태입니다 ({payment.status})",
+            )
+
+        payment.status = PAYMENT_STATUS_FAILED
+        payment.updated_at = _now()
+        db.commit()
+        return {
+            "processed": True,
+            "payment_id": payment.idempotency_key or payment_key,
+            "status": payment.status,
+            "message": "결제 실패로 기록했습니다",
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
 def list_charges(
     db: Session,
     *,
     user_pk: int,
     limit: int = 20,
 ) -> list[dict[str, object]]:
-    """본인 충전 주문 내역 (payments)."""
+    """본인 충전 주문 내역. pending은 숨기고 paid/failed 등만 보여 준다."""
     limit = max(1, min(limit, 100))
     rows = db.scalars(
         select(Payment)
-        .where(Payment.user_id == user_pk)
+        .where(
+            Payment.user_id == user_pk,
+            Payment.status != PAYMENT_STATUS_PENDING,
+        )
         .order_by(Payment.created_at.desc(), Payment.id.desc())
         .limit(limit)
     ).all()

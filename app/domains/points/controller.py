@@ -2,7 +2,7 @@
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.domains.auth.models import User
+from app.domains.auth.models import User, UserRole
 from app.domains.points import service as points_service
 from app.domains.points.schema import (
     BalanceResponse,
@@ -10,11 +10,23 @@ from app.domains.points.schema import (
     ChargeCompleteResponse,
     ChargeCreateRequest,
     ChargeCreateResponse,
+    ChargeFailRequest,
+    ChargeFailResponse,
     ChargeHistoryItem,
     ChargeHistoryResponse,
     CreditRequest,
     CreditResponse,
 )
+
+
+def _role_value(user: User) -> str:
+    role = getattr(user.role, "value", user.role)
+    return str(role or "")
+
+
+def _require_admin(user: User) -> None:
+    if _role_value(user) != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="관리자만 사용할 수 있습니다")
 
 
 def _require_db(db: Session | None) -> Session:
@@ -34,10 +46,12 @@ def credit(
     user: User,
     body: CreditRequest,
 ) -> CreditResponse:
+    _require_admin(user)
     session = _require_db(db)
     result = points_service.credit_points(
         session,
-        user_pk=int(user.id),
+        admin_pk=int(user.id),
+        nickname=body.nickname,
         points=int(body.points),
         memo=body.memo,
     )
@@ -70,6 +84,20 @@ def complete_charge(
         expect_user_pk=int(user.id),
     )
     return ChargeCompleteResponse.model_validate(result)
+
+
+def fail_charge(
+    db: Session | None,
+    user: User,
+    body: ChargeFailRequest,
+) -> ChargeFailResponse:
+    session = _require_db(db)
+    result = points_service.fail_charge(
+        session,
+        payment_id=body.payment_id,
+        expect_user_pk=int(user.id),
+    )
+    return ChargeFailResponse.model_validate(result)
 
 
 def list_charges(

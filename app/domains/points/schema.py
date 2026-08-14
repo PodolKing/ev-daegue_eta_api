@@ -27,6 +27,8 @@ class ChargeCreateResponse(CamelModel):
     store_id: str
     channel_key: str
     status: str
+    customer_email: str
+    customer_name: str
 
 
 class ChargeCompleteRequest(CamelModel):
@@ -60,9 +62,21 @@ class ChargeHistoryResponse(CamelModel):
     count: int
 
 
-class CreditRequest(CamelModel):
-    """포트원 없이 포인트 직접 적립 (테스트/관리용)."""
+class ChargeFailRequest(CamelModel):
+    payment_id: str = Field(min_length=1, max_length=64)
 
+
+class ChargeFailResponse(CamelModel):
+    processed: bool
+    payment_id: str
+    status: str
+    message: str
+
+
+class CreditRequest(CamelModel):
+    """포트원 없이 대상 유저 지갑에 포인트 적립 (ADMIN)."""
+
+    nickname: str = Field(min_length=1, max_length=30, description="적립 대상 닉네임")
     points: int = Field(ge=1, le=1_000_000, description="적립 포인트")
     memo: str | None = Field(default=None, max_length=255)
 
@@ -71,4 +85,5 @@ class CreditResponse(CamelModel):
     processed: bool = True
     points: int
     balance: int
+    nickname: str
     message: str
