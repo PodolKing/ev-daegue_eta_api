@@ -79,6 +79,89 @@ def is_favorite(db: Session, *, user_pk: int, station_id: str) -> bool:
     return favorite_id is not None
 
 
+def toggle_favorite(
+    db: Session,
+    *,
+    user_pk: int,
+    station_id: str,
+    memo: str | None,
+) -> dict[str, object]:
+    """
+    별 마크 토글.
+
+    - 등록 상태면 행을 삭제한다.
+    - 미등록이면 최대 10개와 충전소 존재 여부를 확인한 뒤 등록한다.
+    - memo는 신규 등록에만 적용한다.
+    - 10개 제한은 HTTP 오류가 아니라 processed=false 결과로 반환한다.
+    """
+    station_key = _normalize_station_id(station_id)
+    memo_value = (memo or "").strip() or None
+
+    try:
+        _lock_user(db, user_pk=user_pk)
+
+        favorite = db.scalar(
+            select(UserFavoriteStation).where(
+                UserFavoriteStation.user_id == user_pk,
+                UserFavoriteStation.stat_id == station_key,
+            )
+        )
+        if favorite is not None:
+            db.delete(favorite)
+            db.flush()
+            count = _favorite_count(db, user_pk=user_pk)
+            db.commit()
+            return {
+                "processed": True,
+                "is_favorite": False,
+                "favorite_count": count,
+                "code": "FAVORITE_REMOVED",
+                "message": "즐겨찾기에서 해제되었습니다",
+            }
+
+        if not _station_exists(db, station_id=station_key):
+            raise HTTPException(status_code=404, detail="충전소를 찾을 수 없습니다")
+
+        count = _favorite_count(db, user_pk=user_pk)
+        if count >= MAX_FAVORITES:
+            db.commit()
+            return {
+                "processed": False,
+                "is_favorite": False,
+                "favorite_count": count,
+                "code": "FAVORITE_LIMIT_REACHED",
+                "message": "즐겨찾기는 최대 10개까지 등록할 수 있습니다",
+            }
+
+        now = _now()
+        db.add(
+            UserFavoriteStation(
+                user_id=user_pk,
+                stat_id=station_key,
+                memo=memo_value,
+                created_at=now,
+                last_used_at=now,
+            )
+        )
+        db.commit()
+        return {
+            "processed": True,
+            "is_favorite": True,
+            "favorite_count": count + 1,
+            "code": "FAVORITE_ADDED",
+            "message": "즐겨찾기에 등록되었습니다",
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
 def add_favorite(
     db: Session,
     *,

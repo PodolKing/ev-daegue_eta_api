@@ -12,6 +12,7 @@ from .schema import (
     FavoriteMutationResponse,
     FavoriteSort,
     FavoriteStatusResponse,
+    FavoriteToggleRequest,
 )
 
 
@@ -53,6 +54,22 @@ def status(
         station_id=station_id,
         is_favorite=result,
     )
+
+
+def toggle(
+    db: Session | None,
+    user: User,
+    body: FavoriteToggleRequest,
+) -> FavoriteMutationResponse:
+    """즐겨찾기 등록/해제 토글."""
+    session = _require_db(db)
+    result = favorites_service.toggle_favorite(
+        session,
+        user_pk=int(user.id),
+        station_id=body.station_id,
+        memo=body.memo,
+    )
+    return FavoriteMutationResponse.model_validate(result)
 
 
 def add(

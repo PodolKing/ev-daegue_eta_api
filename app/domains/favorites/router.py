@@ -13,6 +13,7 @@ from .schema import (
     FavoriteMutationResponse,
     FavoriteSort,
     FavoriteStatusResponse,
+    FavoriteToggleRequest,
 )
 
 router = APIRouter(prefix="/api/v1/favorites", tags=["favorites"])
@@ -39,6 +40,19 @@ def favorite_status(
 ) -> FavoriteStatusResponse:
     """장소 정보의 즐겨찾기 마크 상태 조회."""
     return favorites_controller.status(db, user, station_id)
+
+
+@router.post("/toggle", response_model=FavoriteMutationResponse)
+def toggle_favorite(
+    body: FavoriteToggleRequest,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FavoriteMutationResponse:
+    """
+    즐겨찾기 마크 토글 (있으면 해제, 없으면 등록).
+    등록 10개 초과 시 오류 대신 processed=false를 반환한다.
+    """
+    return favorites_controller.toggle(db, user, body)
 
 
 @router.post("", response_model=FavoriteMutationResponse)
