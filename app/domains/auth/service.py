@@ -513,22 +513,6 @@ def _social_display_nickname(provider: AuthProvider) -> str:
     return f"{label}{secrets.randbelow(9000) + 1000}"
 
 
-def _is_social_display_nickname(provider: AuthProvider, nickname: str | None) -> bool:
-    """이미 새 형식(카카오1234 또는 충돌 접미사 포함)인지."""
-    t = (nickname or "").strip()
-    label = _SOCIAL_NICK_LABEL.get(provider)
-    if not label or not t.startswith(label):
-        return False
-    rest = t[len(label) :]
-    if rest.isdigit() and len(rest) == 4:
-        return True
-    # _unique_nickname 충돌 접미사: 카카오1234_ab12
-    if "_" in rest:
-        num, _, suffix = rest.partition("_")
-        return num.isdigit() and len(num) == 4 and bool(suffix)
-    return False
-
-
 def _unique_nickname(db: Session, base: str) -> str:
     """nickname 충돌 시 접미사 부여."""
     candidate = base[:30]
@@ -565,14 +549,6 @@ def upsert_social_user(
         if existing:
             if not existing.is_active:
                 raise HTTPException(status_code=403, detail="비활성 계정")
-            # 구 프로필/식별 닉네임 → 제공자한글+번호로 1회 교체
-            if not _is_social_display_nickname(provider, existing.nickname):
-                existing.nickname = _unique_nickname(
-                    db, _social_display_nickname(provider)
-                )
-                existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-                db.commit()
-                db.refresh(existing)
             return existing
 
         # user_id: provider_providerId (50자 제한)

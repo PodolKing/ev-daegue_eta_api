@@ -2769,3 +2769,96 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 
 ### 다음
 - 로그인 후 ★ 탭이 즉시 채워지는지, 10개일 때 안 켜지고 시트만 뜨는지 확인.
+
+## 2026-08-14 — Agent 수정 권한: 규모 게이트
+
+### 한 일
+- BE 전면 사전승인 → 파일 5개 초과 또는 ~50줄 초과 시 승인·검토로 변경.
+- .cursor/rules/backend-permission.mdc, docs/rules/01_agent_permissions.md, docs/important.md §5 + web/api sync, api-files.mdc 정합.
+
+### 결정
+- web/·api/ 소규모 수정은 승인 없이 진행 가능. TMAP 잠금은 규모 무관 유지.
+
+### 다음
+- (없음 — 규칙만)
+
+## 2026-08-14 — 마이페이지 주소 좌표 PATCH
+
+### 한 일
+- PATCH /me에 userLat·userLng 추가 (schema/controller/service).
+- FE updateProfile·MyPagePanel 저장 시 주소 검색 좌표 함께 전송.
+
+### 결정
+- 가입과 동일하게 프로필 수정에서도 좌표 저장. 비밀번호 PATCH는 여전히 후속.
+
+### 다음
+- 마이페이지에서 주소 검색 → 저장 → /me에 좌표 유지되는지 확인.
+
+
+## 2026-08-14 — 마이페이지 회원 수정·탈퇴·UI
+
+### 한 일
+- authStore: provider·주소·좌표 매핑, updateProfile(PATCH /me), withdraw(DELETE /me) + store clear.
+- MyPagePanel: /me hydrate, 저장(닉·주소·상세·좌표), 탈퇴 confirm·안내 문구, 성공 시 지도로 패널 닫기.
+- UI: 「내 정보 수정」상단 접기/펴기(기본 접힘), 주요 메뉴 일렬(+주변·날씨 비활성 행).
+- BE PATCH /me에 userLat·userLng 추가 (가입과 동일).
+- login: provider 매핑, 토큰 없으면 assign 금지. CarPanel·GuestAuthBanner 터치 min-h-9.
+- 문서: 작업진행상항·auth_api·auth_ux·본 로그. Agent 규모 게이트(파일5+/~50줄+) 반영됨.
+
+### 결정
+- 탈퇴는 소프트 삭제 유지(연관 DB 미삭제). 유저 문구는 로그인·이용 불가만.
+- 비밀번호 변경은 API 없어 UI 제외. 좌표는 주소 검색 후 저장 시 서버 반영.
+
+### 다음
+- 포인트 FE(잔액·내역·PortOne 충전). 마이페이지 주소 검색→저장→좌표 유지 수동 확인.
+
+## 2026-08-14 — 포인트 패널 금액 직접 입력
+
+### 한 일
+- PointsPanel: PortOne/ADMIN 자유충전 모두 **입력창 + 프리셋이 창에 값 채움 + 충전 버튼** 흐름으로 변경
+- BE 한도(1천~100만 원 / 1~100만 P) 클라이언트 선검증
+
+### 결정
+- 프리셋은 즉시 결제하지 않음. 창에 넣은 뒤 충전 버튼만 실행
+
+### 다음
+- PortOne env 키 연동 실결제 확인, ADMIN DB role 테스트
+
+## 2026-08-14 — 포인트 충전·ADMIN 자유충전 1차
+
+### 한 일
+- PointsPanel: 잔액/내역 연동, 금액 입력+가산 프리셋+초기화, PortOne 충전, ADMIN 자유충전.
+- /credit: role=ADMIN만. body nickname으로 대상 유저 지갑 적립(없으면 404). 가입 role은 항상 USER, ADMIN은 DB만.
+- authStore·login에 role. 이니시스용 합성 email/phone. POST /charges/fail, 목록에서 pending 숨김.
+- TMAP 잠금 파일 미수정. 시크릿 문서 없음.
+
+### 결정
+- 자유충전은 환불 아님. user_id 이중 필터 없음. email/전화 컬럼 복구 안 함.
+- 실패 내역은 failed로 남김. pending은 쓰레기라 목록 제외.
+
+### 다음
+- chger 선택 → 사용량 → usage_orders. PortOne 실결제·웹훅은 수동 확인.
+
+## 2026-08-14 — 소셜 닉네임은 가입 시에만 생성
+
+### 한 일
+- upsert_social_user: 기존 계정 재로그인 시 nickname 덮어쓰기 제거. 마이페이지에서 바꾼 닉네임 유지.
+
+### 결정
+- 소셜 닉네임(구글1234 등)은 최초 가입에만 부여. 로그인마다 재생성하지 않음.
+
+### 다음
+- 구글 재로그인 후 마이페이지 닉네임이 유지되는지 확인.
+
+## 2026-08-14 — 충전 요청 UI 2차 (선택·kWh)
+
+### 한 일
+- ChargeRequestPanel: 대기(status=2) 기 목록, 고속 위·출력 높은 순, 4줄+스크롤, kWh 칩 5/10/20/50, 대표차 안내.
+- StationDetailCard: 충전 요청→chargeMode, 비로그인 LoginBottomSheet. 충전 모드 하단은 뒤로+결제(길찾기 숨김). TMAP/MapView 미수정.
+
+### 결정
+- 상세 카드 하단 2칸을 모드별로 재사용. 카드 통째 리팩터 안 함.
+- 완속은 목록에서 빼지 않고 아래로만. 결제 버튼은 기+kWh 유효 시 활성, usage_orders 미연결.
+
+### 다음
+- usage_orders request → pre-authorize → complete → pay. BE ev_charger_status 변조는 합의 위반(막히면 최소 수정·승인).
