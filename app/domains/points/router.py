@@ -12,6 +12,8 @@ from app.domains.points.schema import (
     ChargeCompleteResponse,
     ChargeCreateRequest,
     ChargeCreateResponse,
+    ChargeFailRequest,
+    ChargeFailResponse,
     ChargeHistoryResponse,
     CreditRequest,
     CreditResponse,
@@ -35,7 +37,7 @@ def credit(
     db: Session | None = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> CreditResponse:
-    """포트원 없이 포인트 직접 적립 (point_wallets.balance)."""
+    """ADMIN: 닉네임으로 대상 지갑에 포트원 없이 적립."""
     return points_controller.credit(db, user, body)
 
 
@@ -57,6 +59,16 @@ def complete_charge(
 ) -> ChargeCompleteResponse:
     """클라이언트 결제 완료 후 서버 검증·포인트 적립."""
     return points_controller.complete_charge(db, user, body)
+
+
+@router.post("/charges/fail", response_model=ChargeFailResponse)
+def fail_charge(
+    body: ChargeFailRequest,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ChargeFailResponse:
+    """위젯 실패·취소 시 pending → failed. 지갑은 건드리지 않음."""
+    return points_controller.fail_charge(db, user, body)
 
 
 @router.get("/charges", response_model=ChargeHistoryResponse)
