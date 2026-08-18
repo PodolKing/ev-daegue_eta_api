@@ -13,6 +13,7 @@ from app.domains.cars.schema import (
     CarModelsResponse,
     CarPrimaryUpdateRequest,
     CarPublic,
+    CarUpdateRequest,
 )
 
 
@@ -80,6 +81,20 @@ def create(db: Session | None, user: User, body: CarCreateRequest) -> CarPublic:
         custom_model_name=body.custom_model_name,
         charging_port=body.charging_port,
         is_primary=body.is_primary,
+    )
+    return _car_public(session, car)
+
+
+def update(db: Session | None, user: User, car_id: int, body: CarUpdateRequest) -> CarPublic:
+    """차량 번호·포트·커스텀명 수정."""
+    session = _require_db(db)
+    car = cars_service.update_car(
+        session,
+        user_pk=int(user.id),
+        car_id=car_id,
+        car_number=body.car_number,
+        custom_model_name=body.custom_model_name,
+        charging_port=body.charging_port,
     )
     return _car_public(session, car)
 

@@ -89,11 +89,11 @@ def credit_points(
     points: int,
     memo: str | None = None,
 ) -> dict[str, object]:
-    """ADMIN이 닉네임으로 대상 지갑에 적립. 원장 type=adjust, ref_id=admin pk."""
-    if points < MIN_DIRECT_POINTS or points > MAX_DIRECT_POINTS:
+    """ADMIN이 닉네임 지갑을 ±조정. 원장 type=adjust. 음수는 0 하한. payments 불변."""
+    if points == 0 or abs(points) < MIN_DIRECT_POINTS or abs(points) > MAX_DIRECT_POINTS:
         raise HTTPException(
             status_code=400,
-            detail=f"적립 포인트는 {MIN_DIRECT_POINTS}~{MAX_DIRECT_POINTS}입니다",
+            detail=f"조정 포인트는 ±{MIN_DIRECT_POINTS}~{MAX_DIRECT_POINTS}입니다 (0 불가)",
         )
 
     nick = (nickname or "").strip()
@@ -112,17 +112,34 @@ def credit_points(
         db.refresh(wallet)
 
         now = _now()
-        new_balance = int(wallet.balance) + int(points)
+        old_balance = int(wallet.balance)
+        applied = int(points)
+        new_balance = old_balance + applied
+        if new_balance < 0:
+            new_balance = 0
+            applied = new_balance - old_balance
+        if applied == 0:
+            raise HTTPException(status_code=400, detail="차감할 잔액이 없습니다")
+
         wallet.balance = new_balance
         wallet.version = int(wallet.version) + 1
         wallet.updated_at = now
 
-        note = (memo or "").strip() or f"관리자 충전 → {nick}"
+        if applied > 0:
+            default_note = f"관리자 충전 → {nick}"
+            message = f"{user.nickname}에게 {applied}P가 적립되었습니다"
+        else:
+            default_note = f"관리자 차감 → {nick}"
+            message = f"{user.nickname}에서 {abs(applied)}P가 차감되었습니다"
+            if applied != int(points):
+                message += f" (요청 {abs(int(points))}P, 잔액 하한 0)"
+
+        note = (memo or "").strip() or default_note
         db.add(
             PointTransaction(
                 wallet_id=target_pk,
                 type=TX_TYPE_ADJUST,
-                amount=int(points),
+                amount=applied,
                 balance_after=new_balance,
                 ref_type=REF_TYPE_ADMIN,
                 ref_id=int(admin_pk),
@@ -138,10 +155,10 @@ def credit_points(
         db.commit()
         return {
             "processed": True,
-            "points": int(points),
+            "points": applied,
             "balance": new_balance,
             "nickname": user.nickname,
-            "message": f"{user.nickname}에게 {int(points)}P가 적립되었습니다",
+            "message": message,
         }
     except HTTPException:
         db.rollback()

@@ -14,6 +14,17 @@ class FavoriteAddRequest(CamelModel):
     memo: str | None = Field(default=None, max_length=100)
 
 
+class FavoriteMemoUpdateRequest(CamelModel):
+    """이미 등록된 즐겨찾기 메모만 수정."""
+
+    memo: str | None = Field(default=None, max_length=100)
+
+
+class FavoriteMemoResponse(CamelModel):
+    station_id: str
+    memo: str | None = None
+
+
 class FavoriteToggleRequest(FavoriteAddRequest):
     """별 토글. 있으면 해제, 없으면 등록. memo는 신규 등록에만 적용."""
 

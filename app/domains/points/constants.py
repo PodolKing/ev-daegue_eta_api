@@ -19,7 +19,7 @@ TX_TYPE_ADJUST = "adjust"
 REF_TYPE_PAYMENT = "payment"
 REF_TYPE_ADMIN = "admin"
 
-# 포트원 없이 직접 적립 한도
+# 포트원 없이 ADMIN 조정 한도. 음수=차감(0 하한). 0은 불가.
 MIN_DIRECT_POINTS = 1
 MAX_DIRECT_POINTS = 1_000_000
 
