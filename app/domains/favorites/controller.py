@@ -10,6 +10,8 @@ from .schema import (
     FavoriteItem,
     FavoriteListResponse,
     FavoriteMutationResponse,
+    FavoriteMemoResponse,
+    FavoriteMemoUpdateRequest,
     FavoriteSort,
     FavoriteStatusResponse,
     FavoriteToggleRequest,
@@ -86,6 +88,23 @@ def add(
         memo=body.memo,
     )
     return FavoriteMutationResponse.model_validate(result)
+
+
+def update_memo(
+    db: Session | None,
+    user: User,
+    station_id: str,
+    body: FavoriteMemoUpdateRequest,
+) -> FavoriteMemoResponse:
+    """즐겨찾기 메모 수정."""
+    session = _require_db(db)
+    result = favorites_service.update_favorite_memo(
+        session,
+        user_pk=int(user.id),
+        station_id=station_id,
+        memo=body.memo,
+    )
+    return FavoriteMemoResponse.model_validate(result)
 
 
 def remove(

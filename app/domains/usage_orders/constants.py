@@ -12,6 +12,7 @@ CHARGER_STATUS_WAIT = "2"  # 충전 대기
 CHARGER_STATUS_CHARGING = "3"  # 충전 중
 
 MEMBER_TYPE = "member"
+TARIFF_FALLBACK_BUSI_ID = "__AVG__"
 
 KWH_SOURCE_PRESET = "preset"  # 가결제 시점 placeholder
 KWH_SOURCE_MANUAL = "manual"  # 충전 완료 시 실측/입력

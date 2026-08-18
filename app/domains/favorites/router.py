@@ -10,6 +10,8 @@ from . import controller as favorites_controller
 from .schema import (
     FavoriteAddRequest,
     FavoriteListResponse,
+    FavoriteMemoResponse,
+    FavoriteMemoUpdateRequest,
     FavoriteMutationResponse,
     FavoriteSort,
     FavoriteStatusResponse,
@@ -53,6 +55,17 @@ def toggle_favorite(
     등록 10개 초과 시 오류 대신 processed=false를 반환한다.
     """
     return favorites_controller.toggle(db, user, body)
+
+
+@router.patch("/{station_id}", response_model=FavoriteMemoResponse)
+def update_favorite_memo(
+    station_id: str,
+    body: FavoriteMemoUpdateRequest,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FavoriteMemoResponse:
+    """즐겨찾기 메모만 수정. 등록/해제는 toggle."""
+    return favorites_controller.update_memo(db, user, station_id, body)
 
 
 @router.post("", response_model=FavoriteMutationResponse)

@@ -37,7 +37,7 @@ def credit(
     db: Session | None = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> CreditResponse:
-    """ADMIN: 닉네임으로 대상 지갑에 포트원 없이 적립."""
+    """ADMIN: 닉네임 지갑 조정(+적립/−차감, 0 하한). 일반 유저 403. payments 불변."""
     return points_controller.credit(db, user, body)
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_FLOOR
 from uuid import uuid4
+import logging 
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -14,7 +15,6 @@ from app.domains.cars.models import Car
 from app.domains.points.models import PointTransaction, PointWallet
 from app.domains.stations.models import EvChargerInfo, EvChargerStatus
 from app.domains.usage_orders.constants import (
-    CHARGER_STATUS_CHARGING,
     CHARGER_STATUS_WAIT,
     KWH_SOURCE_MANUAL,
     KWH_SOURCE_PRESET,
@@ -31,9 +31,12 @@ from app.domains.usage_orders.constants import (
     STATUS_REFUNDED,
     TX_TYPE_REFUND,
     TX_TYPE_USE,
+    TARIFF_FALLBACK_BUSI_ID,
 )
 from app.domains.usage_orders.models import OperatorTariff, UsageOrder
 from app.domains.usage_orders.tariff import pick_member_rate_won
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -89,12 +92,44 @@ def _get_charger_pair(
     return info, status
 
 
+def _member_tariff(
+    db: Session,
+    busi_id: str | None,
+) -> tuple[OperatorTariff, bool]:
+    key = (busi_id or "").strip()
+    tariff = None
+    if key:
+        tariff = db.get(
+            OperatorTariff,
+            {"busi_id": key, "member_type": MEMBER_TYPE},
+        )
+    used_avg = tariff is None
+    if used_avg:
+        tariff = db.get(
+            OperatorTariff,
+            {
+                "busi_id": TARIFF_FALLBACK_BUSI_ID,
+                "member_type": MEMBER_TYPE,
+            },
+        )
+    if tariff is None:
+        raise HTTPException(
+            status_code=404,
+            detail="회원 요금 정보를 찾을 수 없습니다",
+        )
+    return tariff, used_avg
+
+
 def _hold_tx_key(order_id: int) -> str:
     return f"usage_hold:{order_id}"
 
 
 def _refund_tx_key(order_id: int) -> str:
     return f"usage_refund:{order_id}"
+
+
+def _cancel_tx_key(order_id: int) -> str:
+    return f"usage_cancel:{order_id}"
 
 
 def _order_to_dict(
@@ -187,6 +222,55 @@ def get_my_order(
     return _order_to_dict(order)
 
 
+def list_wait_member_rates(
+    db: Session,
+    *,
+    stat_id: str,
+) -> dict[str, object]:
+    """한 소 대기 기의 member 단가. 공공·요금표 UPDATE 없음."""
+    stat_key = stat_id.strip()
+    if not stat_key:
+        raise HTTPException(status_code=400, detail="statId가 필요합니다")
+
+    statuses = db.scalars(
+        select(EvChargerStatus).where(
+            EvChargerStatus.stat_id == stat_key,
+            EvChargerStatus.charger_status == CHARGER_STATUS_WAIT,
+        )
+    ).all()
+    items: list[dict[str, object]] = []
+    for status in statuses:
+        info = db.get(
+            EvChargerInfo,
+            {"stat_id": stat_key, "chger_id": status.chger_id},
+        )
+        if info is None:
+            continue
+        output = float(info.output) if info.output is not None else None
+        rate = None
+        used_avg = False
+        try:
+            tariff, used_avg = _member_tariff(db, info.busi_id)
+            rate = pick_member_rate_won(output_kw=output, tariff_row=tariff)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            rate = None
+            used_avg = False
+        except ValueError:
+            rate = None
+            used_avg = False
+        items.append(
+            {
+                "chger_id": str(status.chger_id),
+                "output_kw": output,
+                "rate_member_won": rate,
+                "used_avg": bool(used_avg) if rate is not None else False,
+            }
+        )
+    return {"stat_id": stat_key, "items": items, "count": len(items)}
+
+
 def request_charge(
     db: Session,
     *,
@@ -257,7 +341,7 @@ def pre_authorize(
     limit_amount_krw: int,
     idempotency_key: str | None,
 ) -> dict[str, object]:
-    """2단계: 한도만큼 포인트 선차감 + draft 주문 + 충전기 충전중."""
+    """2단계: 한도만큼 포인트 선차감 + draft 주문. 공공 charger_status는 쓰지 않음."""
     if limit_amount_krw < MIN_HOLD_KRW or limit_amount_krw > MAX_HOLD_KRW:
         raise HTTPException(
             status_code=400,
@@ -353,9 +437,6 @@ def pre_authorize(
             )
         )
 
-        status.charger_status = CHARGER_STATUS_CHARGING
-        status.last_updated = now
-
         db.commit()
         db.refresh(order)
         return _order_to_dict(
@@ -382,7 +463,7 @@ def complete_order(
     kwh: float,
     kwh_source: str | None,
 ) -> dict[str, object]:
-    """3단계: kWh·member 단가로 실요금 산정, 충전기 대기 복구."""
+    """3단계: kWh·member 단가로 실요금 산정. 공공 charger_status는 쓰지 않음."""
     if kwh < MIN_KWH or kwh > MAX_KWH:
         raise HTTPException(
             status_code=400,
@@ -419,23 +500,19 @@ def complete_order(
         if not order.stat_id or not order.chger_id:
             raise HTTPException(status_code=400, detail="주문에 충전기 정보가 없습니다")
 
-        info, status = _get_charger_pair(
+        info, _status = _get_charger_pair(
             db,
             stat_id=str(order.stat_id),
             chger_id=str(order.chger_id),
         )
-        busi_id = order.busi_id or info.busi_id
-        if not busi_id:
-            raise HTTPException(status_code=400, detail="사업자(busiId)를 확인할 수 없습니다")
-
-        tariff = db.get(
-            OperatorTariff,
-            {"busi_id": busi_id, "member_type": MEMBER_TYPE},
-        )
-        if tariff is None:
-            raise HTTPException(
-                status_code=404,
-                detail="회원 요금 정보를 찾을 수 없습니다",
+        raw_busi = order.busi_id or info.busi_id
+        tariff, used_avg = _member_tariff(db, raw_busi)
+        if used_avg:
+            logger.warning(
+                "usage_orders tariff fallback avg stat_id=%s chger_id=%s busi_id=%s",
+                order.stat_id,
+                order.chger_id,
+                raw_busi,
             )
 
         output_kw = float(info.output) if info.output is not None else None
@@ -464,7 +541,7 @@ def complete_order(
         if src not in (KWH_SOURCE_MANUAL, "preset", "operator_session"):
             src = KWH_SOURCE_MANUAL
         order.kwh_source = src if src != KWH_SOURCE_PRESET else KWH_SOURCE_MANUAL
-        order.busi_id = busi_id
+        order.busi_id = str(raw_busi).strip() if raw_busi else None
         order.rate_member_won = rate
         order.rate_non_member_won = None  # member만 사용
         # amount_list_krw = 가결제 한도 유지
@@ -473,11 +550,10 @@ def complete_order(
         order.discount_krw = 0
         order.status = STATUS_DRAFT
         order.updated_at = now
-        order.memo = f"충전 완료 kWh={kwh_dec} rate={rate} fee={actual}"
-
-        status.charger_status = CHARGER_STATUS_WAIT
-        status.last_updated = now
-
+        avg_note = " 추정·평균 기본가" if used_avg else ""
+        order.memo = (
+            f"충전 완료 kWh={kwh_dec} rate={rate} fee={actual}{avg_note}"
+        )
         wallet = _ensure_wallet(db, user_pk=user_pk)
         db.commit()
         db.refresh(order)
@@ -598,6 +674,107 @@ def pay_order(
                 balance=new_balance,
             ),
             "message": "요금 정산이 완료되었습니다",
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
+def cancel_order(
+    db: Session,
+    *,
+    user_pk: int,
+    order_id: int,
+) -> dict[str, object]:
+    """draft 홀드 전액 환불. 공공 charger_status는 쓰지 않음."""
+    try:
+        user = db.execute(
+            select(User).where(User.id == user_pk).with_for_update()
+        ).scalar_one_or_none()
+        if user is None or not user.is_active or user.deleted_at is not None:
+            raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다")
+
+        order = db.execute(
+            select(UsageOrder)
+            .where(UsageOrder.id == order_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if order is None or int(order.user_id) != user_pk:
+            raise HTTPException(status_code=404, detail="이용 주문을 찾을 수 없습니다")
+
+        wallet = _lock_wallet(db, user_pk=user_pk)
+        hold = int(order.amount_list_krw)
+
+        if order.status == STATUS_CANCELLED:
+            return {
+                "processed": False,
+                "order": _order_to_dict(
+                    order,
+                    hold_amount_krw=hold,
+                    refund_amount_krw=hold,
+                    balance=int(wallet.balance),
+                ),
+                "message": "이미 취소된 주문입니다",
+            }
+
+        if order.status != STATUS_DRAFT:
+            raise HTTPException(
+                status_code=409,
+                detail="취소할 수 없는 상태입니다",
+            )
+
+        now = _now()
+        existing_cancel = db.scalar(
+            select(PointTransaction).where(
+                PointTransaction.idempotency_key == _cancel_tx_key(int(order.id))
+            )
+        )
+        if existing_cancel is None:
+            new_balance = int(wallet.balance) + hold
+            wallet.balance = new_balance
+            wallet.version = int(wallet.version) + 1
+            wallet.updated_at = now
+            user.point = new_balance
+            user.updated_at = now
+            db.add(
+                PointTransaction(
+                    wallet_id=user_pk,
+                    type=TX_TYPE_REFUND,
+                    amount=hold,
+                    balance_after=new_balance,
+                    ref_type=REF_TYPE_USAGE_ORDER,
+                    ref_id=int(order.id),
+                    idempotency_key=_cancel_tx_key(int(order.id)),
+                    memo=f"충전 가결제 취소 환불 order={order.id}",
+                    created_at=now,
+                )
+            )
+        else:
+            new_balance = int(wallet.balance)
+
+        order.points_spent = 0
+        order.discount_krw = 0
+        order.status = STATUS_CANCELLED
+        order.updated_at = now
+        order.memo = f"가결제 취소 refund={hold}"
+
+        db.commit()
+        db.refresh(order)
+        return {
+            "processed": True,
+            "order": _order_to_dict(
+                order,
+                hold_amount_krw=hold,
+                refund_amount_krw=hold,
+                balance=new_balance,
+            ),
+            "message": "가결제가 취소되었습니다",
         }
     except HTTPException:
         db.rollback()

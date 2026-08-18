@@ -82,3 +82,18 @@ class UsageOrderListResponse(CamelModel):
 
     items: list[UsageOrderPublic]
     count: int
+
+
+class WaitChargerRate(CamelModel):
+    chger_id: str
+    output_kw: float | None = None
+    rate_member_won: Decimal | None = None
+    used_avg: bool = False
+
+
+class WaitChargerRatesResponse(CamelModel):
+    """대기 기 member 단가 (조회만)."""
+
+    stat_id: str
+    items: list[WaitChargerRate]
+    count: int

@@ -138,6 +138,70 @@ def create_car(
         ) from None
 
 
+def update_car(
+    db: Session,
+    *,
+    user_pk: int,
+    car_id: int,
+    car_number: str | None,
+    custom_model_name: str | None,
+    charging_port: str | None,
+) -> Car:
+    """번호·포트·커스텀명만 수정. 마스터 기종 교체 없음."""
+    try:
+        car = db.scalar(
+            select(Car).where(
+                Car.id == car_id,
+                Car.user_id == user_pk,
+                Car.is_active.is_(True),
+            )
+        )
+        if car is None:
+            raise HTTPException(status_code=404, detail="차량을 찾을 수 없음")
+
+        is_custom = car.car_model_id is None
+        number = (car_number or "").strip() or None
+        if number and len(number) > 20:
+            raise HTTPException(status_code=400, detail="carNumber는 20자 이하여야 합니다")
+
+        if custom_model_name is not None:
+            custom = custom_model_name.strip()
+            if not is_custom:
+                raise HTTPException(
+                    status_code=400,
+                    detail="등록 기종은 이름을 바꿀 수 없습니다",
+                )
+            if not custom:
+                raise HTTPException(status_code=400, detail="커스텀 기종명은 필수입니다")
+            if len(custom) > 50:
+                raise HTTPException(
+                    status_code=400, detail="customModelName은 50자 이하여야 합니다"
+                )
+            car.custom_model_name = custom
+
+        port = _parse_port(charging_port)
+        if is_custom and port is None:
+            raise HTTPException(
+                status_code=400,
+                detail="커스텀 기종은 chargingPort가 필수입니다",
+            )
+        car.car_number = number
+        car.charging_port = port
+        car.updated_at = _now()
+        db.commit()
+        db.refresh(car)
+        return car
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
 def set_primary_car(
     db: Session,
     *,

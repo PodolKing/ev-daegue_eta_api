@@ -74,10 +74,14 @@ class ChargeFailResponse(CamelModel):
 
 
 class CreditRequest(CamelModel):
-    """포트원 없이 대상 유저 지갑에 포인트 적립 (ADMIN)."""
+    """ADMIN 전용. +적립 / −차감. 일반 유저 라우트 403. payments 불변."""
 
-    nickname: str = Field(min_length=1, max_length=30, description="적립 대상 닉네임")
-    points: int = Field(ge=1, le=1_000_000, description="적립 포인트")
+    nickname: str = Field(min_length=1, max_length=30, description="대상 닉네임")
+    points: int = Field(
+        ge=-1_000_000,
+        le=1_000_000,
+        description="조정 포인트. 양수=적립, 음수=차감(잔액 0 하한). 0 불가",
+    )
     memo: str | None = Field(default=None, max_length=255)
 
 

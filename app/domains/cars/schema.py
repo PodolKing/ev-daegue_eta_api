@@ -29,6 +29,14 @@ class CarCreateRequest(CamelModel):
     is_primary: bool = False
 
 
+class CarUpdateRequest(CamelModel):
+    """차량 내용 수정. 기종(carModelId)은 바꾸지 않음. 대표는 setPrimary."""
+
+    car_number: str | None = None
+    custom_model_name: str | None = None
+    charging_port: str | None = None
+
+
 class CarPrimaryUpdateRequest(CamelModel):
     """대표 차량 설정(true) 또는 해제(false)."""
 

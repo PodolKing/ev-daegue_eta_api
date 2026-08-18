@@ -14,6 +14,7 @@ from app.domains.usage_orders.schema import (
     PreAuthorizeRequest,
     UsageOrderListResponse,
     UsageOrderPublic,
+    WaitChargerRatesResponse,
 )
 
 router = APIRouter(prefix="/api/v1/usage-orders", tags=["usage-orders"])
@@ -31,6 +32,15 @@ def list_orders(
 ) -> UsageOrderListResponse:
     """본인 이용·결제 내역 조회 (최신순)."""
     return usage_controller.list_mine(db, user, status=status, limit=limit)
+
+
+@router.get("/rates", response_model=WaitChargerRatesResponse)
+def wait_charger_rates(
+    stat_id: str = Query(..., min_length=1, max_length=20),
+    db: Session | None = Depends(get_db),
+) -> WaitChargerRatesResponse:
+    """대기 기 member 단가 조회. 지갑·주문 없음. 공공 불변."""
+    return usage_controller.list_wait_rates(db, stat_id=stat_id)
 
 
 @router.get("/{order_id}", response_model=UsageOrderPublic)
@@ -82,3 +92,13 @@ def pay_order(
 ) -> PayResponse:
     """4. 요금 정산 — 가결제 차액 환불, confirmed."""
     return usage_controller.pay(db, user, order_id)
+
+
+@router.post("/{order_id}/cancel", response_model=PayResponse)
+def cancel_order(
+    order_id: int,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PayResponse:
+    """draft 가결제 취소 — 홀드 전액 환불. 공공 status 불변."""
+    return usage_controller.cancel(db, user, order_id)

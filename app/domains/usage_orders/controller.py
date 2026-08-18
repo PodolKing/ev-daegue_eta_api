@@ -12,6 +12,7 @@ from app.domains.usage_orders.schema import (
     PreAuthorizeRequest,
     UsageOrderListResponse,
     UsageOrderPublic,
+    WaitChargerRatesResponse,
 )
 
 
@@ -118,3 +119,31 @@ def get_mine(
         order_id=order_id,
     )
     return UsageOrderPublic.model_validate(row)
+
+
+def cancel(
+    db: Session | None,
+    user: User,
+    order_id: int,
+) -> PayResponse:
+    session = _require_db(db)
+    result = usage_service.cancel_order(
+        session,
+        user_pk=int(user.id),
+        order_id=order_id,
+    )
+    return PayResponse(
+        processed=bool(result["processed"]),
+        order=UsageOrderPublic.model_validate(result["order"]),
+        message=str(result["message"]),
+    )
+
+
+def list_wait_rates(
+    db: Session | None,
+    *,
+    stat_id: str,
+) -> WaitChargerRatesResponse:
+    session = _require_db(db)
+    result = usage_service.list_wait_member_rates(session, stat_id=stat_id)
+    return WaitChargerRatesResponse.model_validate(result)

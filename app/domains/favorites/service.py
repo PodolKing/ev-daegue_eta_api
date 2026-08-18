@@ -233,6 +233,44 @@ def add_favorite(
         ) from None
 
 
+def update_favorite_memo(
+    db: Session,
+    *,
+    user_pk: int,
+    station_id: str,
+    memo: str | None,
+) -> dict[str, object]:
+    """등록된 즐겨찾기 메모만 갱신. 없으면 404."""
+    station_key = _normalize_station_id(station_id)
+    memo_value = (memo or "").strip() or None
+    if memo_value and len(memo_value) > 100:
+        raise HTTPException(status_code=400, detail="memo는 100자 이하여야 합니다")
+
+    try:
+        favorite = db.scalar(
+            select(UserFavoriteStation).where(
+                UserFavoriteStation.user_id == user_pk,
+                UserFavoriteStation.stat_id == station_key,
+            )
+        )
+        if favorite is None:
+            raise HTTPException(
+                status_code=404, detail="즐겨찾기에 등록되지 않은 충전소입니다"
+            )
+        favorite.memo = memo_value
+        db.commit()
+        return {"station_id": station_key, "memo": memo_value}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="내부 서버 에러(관리자에게 문의)",
+        ) from None
+
+
 def remove_favorite(
     db: Session,
     *,

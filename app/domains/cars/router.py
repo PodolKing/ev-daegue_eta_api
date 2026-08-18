@@ -14,6 +14,7 @@ from app.domains.cars.schema import (
     CarModelsResponse,
     CarPrimaryUpdateRequest,
     CarPublic,
+    CarUpdateRequest,
 )
 
 router = APIRouter(prefix="/api/v1/cars", tags=["cars"])
@@ -45,6 +46,17 @@ def create_car(
 ) -> CarPublic:
     """차량 등록 — carModelId 또는 customModelName. 커스텀은 chargingPort 필수."""
     return cars_controller.create(db, user, body)
+
+
+@router.patch("/updateCar/{car_id}", response_model=CarPublic)
+def update_car(
+    car_id: int,
+    body: CarUpdateRequest,
+    db: Session | None = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CarPublic:
+    """차량 번호·포트·커스텀명 수정. 기종 교체·대표는 별도."""
+    return cars_controller.update(db, user, car_id, body)
 
 
 @router.patch("/setPrimary/{car_id}", response_model=CarPublic)
