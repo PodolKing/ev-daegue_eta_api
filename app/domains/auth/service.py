@@ -633,6 +633,36 @@ def complete_oauth_callback(
     return access_token, user, redirect_url
 
 
+def complete_kakao_native_login(db: Session, *, kakao_access_token: str) -> tuple[str, User]:
+    return complete_native_social_login(
+        db, provider=AuthProvider.KAKAO, provider_access_token=kakao_access_token
+    )
+
+
+def complete_naver_native_login(db: Session, *, naver_access_token: str) -> tuple[str, User]:
+    return complete_native_social_login(
+        db, provider=AuthProvider.NAVER, provider_access_token=naver_access_token
+    )
+
+
+def complete_native_social_login(
+    db: Session, *, provider: AuthProvider, provider_access_token: str
+) -> tuple[str, User]:
+    """Kakao/Naver SDK token → upsert + our JWT (no redirect)."""
+    token = provider_access_token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="accessToken 누락")
+    provider_id, nickname = fetch_social_profile(provider, access_token=token)
+    user = upsert_social_user(
+        db,
+        provider=provider,
+        provider_id=provider_id,
+        nickname=nickname,
+    )
+    access_token = create_access_token(sub=str(user.user_id), user_pk=int(user.id))
+    return access_token, user
+
+
 def frontend_error_redirect(message: str) -> str:
     """OAuth 실패 시 FE 로그인 경로로 안내."""
     settings = get_settings()

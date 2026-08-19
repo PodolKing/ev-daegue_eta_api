@@ -7,9 +7,11 @@ from app.core.config import get_settings
 from app.domains.auth import service as auth_service
 from app.domains.auth.models import User
 from app.domains.auth.schema import (
+    KakaoNativeLoginRequest,
     LoginRequest,
     LoginResponse,
     MeResponse,
+    NaverNativeLoginRequest,
     SignupRequest,
     SignupResponse,
     UpdateProfileRequest,
@@ -124,6 +126,36 @@ def withdraw(
 
 
 # --- 소셜 OAuth ---
+
+
+def kakao_native_login(
+    db: Session | None, body: KakaoNativeLoginRequest
+) -> LoginResponse:
+    """POST /kakao/native — Flutter Kakao SDK token → JWT."""
+    session = _require_db(db)
+    token, user = auth_service.complete_kakao_native_login(
+        session, kakao_access_token=body.access_token
+    )
+    return LoginResponse(
+        access_token=token,
+        user=_to_public(user),
+        message="카카오 로그인 성공",
+    )
+
+
+def naver_native_login(
+    db: Session | None, body: NaverNativeLoginRequest
+) -> LoginResponse:
+    """POST /naver/native — Flutter Naver SDK token → JWT."""
+    session = _require_db(db)
+    token, user = auth_service.complete_naver_native_login(
+        session, naver_access_token=body.access_token
+    )
+    return LoginResponse(
+        access_token=token,
+        user=_to_public(user),
+        message="네이버 로그인 성공",
+    )
 
 
 def oauth_login_redirect(provider: str, return_url: str | None) -> RedirectResponse:
