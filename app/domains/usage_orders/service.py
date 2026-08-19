@@ -7,7 +7,7 @@ from uuid import uuid4
 import logging 
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domains.auth.models import User
@@ -132,12 +132,27 @@ def _cancel_tx_key(order_id: int) -> str:
     return f"usage_cancel:{order_id}"
 
 
+def _lookup_stat_nm(db: Session, stat_id: str | None) -> str | None:
+    if not stat_id:
+        return None
+    name = db.scalar(
+        select(func.max(EvChargerInfo.stat_nm)).where(
+            EvChargerInfo.stat_id == stat_id
+        )
+    )
+    if name is None:
+        return None
+    stripped = str(name).strip()
+    return stripped or None
+
+
 def _order_to_dict(
     order: UsageOrder,
     *,
     hold_amount_krw: int | None = None,
     refund_amount_krw: int | None = None,
     balance: int | None = None,
+    stat_nm: str | None = None,
 ) -> dict[str, object]:
     hold = (
         hold_amount_krw
@@ -156,6 +171,7 @@ def _order_to_dict(
         "stat_id": order.stat_id,
         "chger_id": order.chger_id,
         "busi_id": order.busi_id,
+        "stat_nm": stat_nm,
         "kwh": order.kwh,
         "kwh_source": order.kwh_source,
         "rate_member_won": order.rate_member_won,
@@ -182,7 +198,19 @@ def list_my_orders(
 ) -> list[dict[str, object]]:
     """본인 이용·결제(usage_orders) 내역 최신순."""
     limit = max(1, min(int(limit), 100))
-    stmt = select(UsageOrder).where(UsageOrder.user_id == user_pk)
+    info_names = (
+        select(
+            EvChargerInfo.stat_id,
+            func.max(EvChargerInfo.stat_nm).label("stat_nm"),
+        )
+        .group_by(EvChargerInfo.stat_id)
+        .subquery()
+    )
+    stmt = (
+        select(UsageOrder, info_names.c.stat_nm)
+        .outerjoin(info_names, info_names.c.stat_id == UsageOrder.stat_id)
+        .where(UsageOrder.user_id == user_pk)
+    )
     if status:
         status_key = status.strip().lower()
         allowed = {
@@ -200,8 +228,11 @@ def list_my_orders(
     stmt = stmt.order_by(UsageOrder.created_at.desc(), UsageOrder.id.desc()).limit(
         limit
     )
-    rows = db.scalars(stmt).all()
-    return [_order_to_dict(row) for row in rows]
+    rows = db.execute(stmt).all()
+    return [
+        _order_to_dict(row, stat_nm=(name.strip() if name else None))
+        for row, name in rows
+    ]
 
 
 def get_my_order(
@@ -219,7 +250,7 @@ def get_my_order(
     )
     if order is None:
         raise HTTPException(status_code=404, detail="이용 주문을 찾을 수 없습니다")
-    return _order_to_dict(order)
+    return _order_to_dict(order, stat_nm=_lookup_stat_nm(db, order.stat_id))
 
 
 def list_wait_member_rates(

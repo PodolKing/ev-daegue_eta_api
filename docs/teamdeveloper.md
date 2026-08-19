@@ -3090,3 +3090,27 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 
 ### 다음
 - 실기기: AI 목록 km와 상세 「직선 km」가 같은지, 반경 밖 충전소 상세에 직선 km가 뜨는지 확인.
+## 2026-08-19 — 이용 내역 충전소명 조인
+
+### 한 일
+- usage_orders 목록·단건에 ev_charger_info.stat_nm을 LEFT JOIN으로 붙여 응답(statNm).
+- 내역 UI는 statNm을 쓰고, 없으면 statId로 표시.
+
+### 결정
+- usage_orders 테이블에 이름을 저장하지 않음. info 조회 시점 명칭 사용.
+
+### 다음
+- 없음.
+
+## 2026-08-19 — 상태 오래됨(충전기 last_updated)
+
+### 한 일
+- 상세·목록·충전 요청 패널에 status.last_updated 기준 경고. 멘트는 「상태 오래됨」(사용이력 아님).
+- 임계 15일. 소 단위는 충전기 행 집계: 전부 오래됨=목록 칩+상세 전체 문구, 일부만=상세만, 충전기 선택 행에 개별 표시.
+
+### 결정
+- 574건은 ev_charger_status 충전기 기준. 소 전체 테두리/마커 경고는 넣지 않음.
+- last_updated null은 15일 버킷과 섞지 않음.
+
+### 다음
+- 소 단위 건수 확인 후 마커 ! 여부 재검토.
