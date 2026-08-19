@@ -3041,3 +3041,52 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 
 ### 다음
 - 없음.
+
+## 2026-08-19 — 즐겨찾기 목록 정렬 버튼
+
+### 한 일
+- FavoritesPanel 목록 탭에 최신순/이름순 토글 버튼 추가.
+- favoriteStore가 GET /favorites/list?sort=recent|name 을 그대로 사용.
+
+### 결정
+- 드롭다운 없이 버튼 한 번으로 전환. 기본값은 최신순.
+
+### 다음
+- 없음.
+
+## 2026-08-19 — 즐겨찾기 목록 메모 UI
+
+### 한 일
+- 목록 행에서 상시 입력+저장 폼을 없앰. 없으면 「메모 추가」, 있으면 본문+「수정」.
+- 편집 중에만 입력·취소·저장. 모바일 입력 16px·터치 높이 유지, iOS 포커스 줌 방지.
+
+### 결정
+- 플레이스홀더는 편집 중에만 보임. 빈 입력칸을 목록 기본 상태로 두지 않음.
+
+### 다음
+- 없음.
+
+## 2026-08-19 — stations lat/lng 범위 검증
+
+### 한 일
+- GET /api/v1/stations Query: lat -90~90, lng -180~180. 범위 밖은 FastAPI 422.
+- api/docs·web/docs stations_api.md 반영.
+
+### 결정
+- 앱 정상 좌표는 영향 없음. 검사 항목(lat=999)만 거절.
+
+### 다음
+- 없음.
+
+## 2026-08-19 — AI 상세 카드 거리: 추천 distanceM
+
+### 한 일
+- StationDetailCard: AI 추천 활성 중이고 해당 statId의 distanceM이 있으면 그 값(m/1000)을 「직선 km」에 표시.
+- 일반 지도: API `distanceKm`이 없어도(반경 밖·단건 hydrate) 현위치/stationsAnchor와 충전소 좌표로 Haversine 표시.
+
+### 결정
+- 분기만. 모델 점수/순위는 그대로. TMAP 경로 거리와 무관.
+- 반경 밖 거리는 DB 재조회 없이 FE 좌표 계산. nearby SQL은 반경 내만 distance_km를 줌.
+
+### 다음
+- 실기기: AI 목록 km와 상세 「직선 km」가 같은지, 반경 밖 충전소 상세에 직선 km가 뜨는지 확인.

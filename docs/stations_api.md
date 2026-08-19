@@ -4,8 +4,8 @@
 
 | Param | Type | Default | Max | Notes |
 |---|---|---|---|---|
-| `lat` | number | required | — | Current latitude |
-| `lng` | number | required | — | Current longitude |
+| `lat` | number | required | −90~90 | WGS84. 범위 밖은 422 |
+| `lng` | number | required | −180~180 | WGS84. 범위 밖은 422 |
 | `radiusKm` | number | `3` | `10` | Straight-line radius (km). UI: **1 / 2 / 3** |
 | `limit` | int | `50` | `200` | Max stations. FE: **1→50 / 2→100 / 3→200** |
 
