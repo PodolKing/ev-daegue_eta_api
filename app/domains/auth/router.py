@@ -8,9 +8,11 @@ from app.domains.auth import controller as auth_controller
 from app.domains.auth.deps import get_current_user, get_current_user_optional
 from app.domains.auth.models import User
 from app.domains.auth.schema import (
+    KakaoNativeLoginRequest,
     LoginRequest,
     LoginResponse,
     MeResponse,
+    NaverNativeLoginRequest,
     SignupRequest,
     SignupResponse,
     UpdateProfileRequest,
@@ -63,6 +65,22 @@ def logout(response: Response):
 
 
 # --- 소셜 OAuth (google | kakao | naver) — 리다이렉트 전용 ---
+
+
+@router.post("/kakao/native", response_model=LoginResponse)
+def kakao_native_login(
+    body: KakaoNativeLoginRequest, db: Session | None = Depends(get_db)
+) -> LoginResponse:
+    """Flutter Kakao SDK accessToken → 우리 JWT (앱 로그인)."""
+    return auth_controller.kakao_native_login(db, body)
+
+
+@router.post("/naver/native", response_model=LoginResponse)
+def naver_native_login(
+    body: NaverNativeLoginRequest, db: Session | None = Depends(get_db)
+) -> LoginResponse:
+    """Flutter Naver SDK accessToken → 우리 JWT (앱 로그인)."""
+    return auth_controller.naver_native_login(db, body)
 
 
 @router.get("/{provider}/login", response_class=RedirectResponse)

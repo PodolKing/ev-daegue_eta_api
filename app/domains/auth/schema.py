@@ -69,6 +69,18 @@ class LoginResponse(CamelModel):
     user: UserPublic
 
 
+class KakaoNativeLoginRequest(CamelModel):
+    """Flutter Kakao SDK access token → our JWT."""
+
+    access_token: str = Field(..., min_length=8)
+
+
+class NaverNativeLoginRequest(CamelModel):
+    """Flutter Naver SDK access token → our JWT."""
+
+    access_token: str = Field(..., min_length=8)
+
+
 class UpdateProfileResponse(CamelModel):
     success: bool = True
     message: str = "회원 정보가 수정되었습니다"
