@@ -48,6 +48,7 @@ class UsageOrderPublic(CamelModel):
     stat_id: str | None
     chger_id: str | None
     busi_id: str | None
+    stat_nm: str | None = None
     kwh: Decimal
     kwh_source: str
     rate_member_won: Decimal
