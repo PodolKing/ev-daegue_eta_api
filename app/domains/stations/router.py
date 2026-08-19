@@ -20,8 +20,8 @@ router = APIRouter(prefix="/api/v1/stations", tags=["stations"])
 
 @router.get("", response_model=StationListResponse)
 def list_stations(
-    lat: float = Query(..., description="Current latitude"),
-    lng: float = Query(..., description="Current longitude"),
+    lat: float = Query(..., ge=-90, le=90, description="Current latitude"),
+    lng: float = Query(..., ge=-180, le=180, description="Current longitude"),
     radius_km: float = Query(DEFAULT_RADIUS_KM, ge=0.1, le=10),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     db: Session | None = Depends(get_db),
