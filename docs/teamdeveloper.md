@@ -3114,3 +3114,43 @@ unCategorySearch: center + radiusKm, 성공 무메시지, 실패 console.error.
 
 ### 다음
 - 소 단위 건수 확인 후 마커 ! 여부 재검토.
+
+## 2026-08-20 — 충전 결제 슬라이스 3 (금액/사용량 모드 정산)
+
+### 한 일
+- BE usage_orders: pre_authorize/complete/pay에 amount|usage 모드 반영. 사용량 모드는 잔액 홀드·캡 제거·부족분 402. 금액 모드는 floor(kWh×rate)≤P 산정.
+- schema/controller/service 정리(붙여넣기 메모 제거). shortfall_krw 응답 필드.
+- FE api.ts: mode 전달, ApiHttpError(status), shortfallKrw 타입. StationDetailCard: 금액 탭 활성, pay 402 시 cancel 생략.
+
+### 결정
+- amount pre-auth는 사용자 입력 P, usage는 min(잔액, MAX_HOLD). pay 402는 draft 유지(충전 유도는 슬라이스 4).
+
+### 다음
+- pytest 로컬 venv에서 TC-014~020 재실행. PortOne 부족분 충전 UI(슬라이스 4).
+
+## 2026-08-20 — 충전 결제 슬라이스 3 검토
+
+### 한 일
+- 금액/사용량 정산 경로 검토: BE pre_authorize·complete·pay, FE handleUsagePay(mode 전달, pay 402 시 cancel 생략), api.ts mode/ApiHttpError.
+- 기존 TC-014~020에 mode 인자 맞춤. usage 잔액 홀드, 캡 없음+pay 402(draft 유지), amount complete kWh 무시 테스트 추가.
+
+### 결정
+- 금액 탭: 사용자 입력 P가 홀드(고정 5천 아님). 사용량 탭: 잔액 홀드, 요금은 입력 kWh×단가.
+- pay 402는 draft 유지. 부족분 PortOne 충전 UI는 슬라이스 4.
+
+### 다음
+- 로컬 venv에서 `pytest tests/test_usage_orders.py`. 슬라이스 4: 402 시 포인트 충전 유도.
+## 2026-08-20 — draft 이용주문 복구 (새로고침·재로그인)
+
+### 한 일
+- FE etchUsageOrders(limit, status) — draft 목록 조회. usageDraftStore.hydrate() 로 최신 draft 1건 보관.
+- /map 로그인 후 handlePostLoginLanding: draft 있으면 해당 충전소 setSelectedId.
+- StationDetailCard: draft·선택 충전소 일치 시 chargeMode·pendingOrderId·shortfall UI 복구. 결제 취소(dismissPendingOrder)·성공 시 store clear.
+- pay 402 재시도 버튼: pending 있으면 canPay 없이 결제 가능.
+
+### 결정
+- BE 변경 없음 — GET /usage-orders/list?status=draft&limit=1 재사용.
+- complete 전 draft(홀드만)는 취소 버튼만; 요금 산정 후(shortfall) 충전 UI.
+
+### 다음
+- 수동: 402 → 새로고침 → 해당 충전소 카드에서 이어하기/취소 확인.
