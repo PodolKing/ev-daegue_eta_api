@@ -23,6 +23,8 @@ from app.domains.usage_orders.constants import (
     MEMBER_TYPE,
     MIN_HOLD_KRW,
     MIN_KWH,
+    PAY_MODE_AMOUNT,
+    PAY_MODE_USAGE,
     PLACEHOLDER_KWH,
     REF_TYPE_USAGE_ORDER,
     STATUS_CANCELLED,
@@ -132,6 +134,47 @@ def _cancel_tx_key(order_id: int) -> str:
     return f"usage_cancel:{order_id}"
 
 
+def _shortfall_tx_key(order_id: int) -> str:
+    return f"usage_shortfall:{order_id}"
+
+
+def _normalize_pay_mode(mode: str | None) -> str:
+    key = (mode or PAY_MODE_USAGE).strip().lower()
+    if key not in (PAY_MODE_AMOUNT, PAY_MODE_USAGE):
+        raise HTTPException(
+            status_code=400,
+            detail="mode는 amount 또는 usage 여야 합니다",
+        )
+    return key
+
+
+def _draft_memo(mode: str) -> str:
+    return f"draft|{mode}"
+
+
+def _shortfall_krw(hold: int, actual: int) -> int:
+    return max(0, actual - hold)
+
+
+def _amount_mode_kwh_and_fee(hold: int, rate: Decimal) -> tuple[Decimal, int]:
+    """금액 모드: floor(kWh×rate) ≤ hold 인 최대 kWh·청구액."""
+    if hold <= 0 or rate <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="충전 금액으로 사용량을 계산할 수 없습니다",
+        )
+    kwh = (Decimal(hold) / rate).quantize(Decimal("0.01"), rounding=ROUND_FLOOR)
+    while kwh >= Decimal(str(MIN_KWH)):
+        fee = int((kwh * rate).to_integral_value(rounding=ROUND_FLOOR))
+        if fee <= hold:
+            return kwh, fee
+        kwh -= Decimal("0.01")
+    raise HTTPException(
+        status_code=400,
+        detail="충전 금액으로 사용량을 계산할 수 없습니다",
+    )
+
+
 def _lookup_stat_nm(db: Session, stat_id: str | None) -> str | None:
     if not stat_id:
         return None
@@ -151,6 +194,7 @@ def _order_to_dict(
     *,
     hold_amount_krw: int | None = None,
     refund_amount_krw: int | None = None,
+    shortfall_krw: int | None = None,
     balance: int | None = None,
     stat_nm: str | None = None,
 ) -> dict[str, object]:
@@ -164,6 +208,12 @@ def _order_to_dict(
         refund = max(0, hold - int(order.points_spent))
     elif refund is None and order.kwh_source == KWH_SOURCE_MANUAL:
         refund = max(0, hold - int(order.amount_charge_krw))
+
+    shortfall = shortfall_krw
+    if shortfall is None and order.status == STATUS_DRAFT:
+        shortfall = _shortfall_krw(hold, int(order.amount_charge_krw))
+    elif shortfall is None:
+        shortfall = 0
 
     return {
         "id": int(order.id),
@@ -183,6 +233,7 @@ def _order_to_dict(
         "memo": order.memo,
         "hold_amount_krw": hold,
         "refund_amount_krw": refund,
+        "shortfall_krw": shortfall,
         "balance": balance,
         "created_at": order.created_at,
         "updated_at": order.updated_at,
@@ -371,13 +422,10 @@ def pre_authorize(
     chger_id: str,
     limit_amount_krw: int,
     idempotency_key: str | None,
+    mode: str | None = None,
 ) -> dict[str, object]:
-    """2단계: 한도만큼 포인트 선차감 + draft 주문. 공공 charger_status는 쓰지 않음."""
-    if limit_amount_krw < MIN_HOLD_KRW or limit_amount_krw > MAX_HOLD_KRW:
-        raise HTTPException(
-            status_code=400,
-            detail=f"충전 한도는 {MIN_HOLD_KRW}~{MAX_HOLD_KRW}원입니다",
-        )
+    """2단계: 금액/사용량 모드에 따라 포인트 선차감 + draft 주문."""
+    pay_mode = _normalize_pay_mode(mode)
 
     try:
         user = db.execute(
@@ -394,9 +442,10 @@ def pre_authorize(
                 if int(existing.user_id) != user_pk:
                     raise HTTPException(status_code=409, detail="idempotencyKey 충돌")
                 wallet = _ensure_wallet(db, user_pk=user_pk)
+                hold = int(existing.amount_list_krw)
                 return _order_to_dict(
                     existing,
-                    hold_amount_krw=int(existing.amount_list_krw),
+                    hold_amount_krw=hold,
                     balance=int(wallet.balance),
                 )
 
@@ -417,7 +466,22 @@ def pre_authorize(
             )
 
         wallet = _lock_wallet(db, user_pk=user_pk)
-        if int(wallet.balance) < limit_amount_krw:
+        if pay_mode == PAY_MODE_USAGE:
+            hold = min(int(wallet.balance), MAX_HOLD_KRW)
+        else:
+            if limit_amount_krw < MIN_HOLD_KRW or limit_amount_krw > MAX_HOLD_KRW:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"충전 금액은 {MIN_HOLD_KRW}~{MAX_HOLD_KRW}원입니다",
+                )
+            hold = limit_amount_krw
+
+        if hold < MIN_HOLD_KRW:
+            raise HTTPException(
+                status_code=402,
+                detail="포인트가 부족합니다. 포인트 충전 후 다시 시도하세요",
+            )
+        if int(wallet.balance) < hold:
             raise HTTPException(
                 status_code=402,
                 detail="포인트가 부족합니다. 포인트 충전 후 다시 시도하세요",
@@ -429,17 +493,16 @@ def pre_authorize(
             stat_id=stat_key,
             chger_id=chger_key,
             busi_id=info.busi_id,
-            # DB CHECK: kwh > 0 — 완료 전 placeholder
             kwh=Decimal(PLACEHOLDER_KWH),
             kwh_source=KWH_SOURCE_PRESET,
             rate_member_won=Decimal("0.00"),
             rate_non_member_won=None,
-            amount_list_krw=limit_amount_krw,  # 가결제 한도 보관
-            amount_charge_krw=limit_amount_krw,
+            amount_list_krw=hold,
+            amount_charge_krw=hold,
             discount_krw=0,
             points_spent=0,
             status=STATUS_DRAFT,
-            memo="충전 가결제",
+            memo=_draft_memo(pay_mode),
             idempotency_key=idempotency_key or f"preauth_{uuid4().hex}",
             created_at=now,
             updated_at=now,
@@ -447,7 +510,7 @@ def pre_authorize(
         db.add(order)
         db.flush()
 
-        new_balance = int(wallet.balance) - limit_amount_krw
+        new_balance = int(wallet.balance) - hold
         wallet.balance = new_balance
         wallet.version = int(wallet.version) + 1
         wallet.updated_at = now
@@ -458,12 +521,12 @@ def pre_authorize(
             PointTransaction(
                 wallet_id=user_pk,
                 type=TX_TYPE_USE,
-                amount=limit_amount_krw,
+                amount=hold,
                 balance_after=new_balance,
                 ref_type=REF_TYPE_USAGE_ORDER,
                 ref_id=int(order.id),
                 idempotency_key=_hold_tx_key(int(order.id)),
-                memo=f"충전 가결제 한도 차감 order={order.id}",
+                memo=f"충전 가결제 차감 order={order.id}",
                 created_at=now,
             )
         )
@@ -472,7 +535,7 @@ def pre_authorize(
         db.refresh(order)
         return _order_to_dict(
             order,
-            hold_amount_krw=limit_amount_krw,
+            hold_amount_krw=hold,
             balance=new_balance,
         )
     except HTTPException:
@@ -491,15 +554,18 @@ def complete_order(
     *,
     user_pk: int,
     order_id: int,
-    kwh: float,
+    kwh: float | None,
     kwh_source: str | None,
+    mode: str | None = None,
 ) -> dict[str, object]:
     """3단계: kWh·member 단가로 실요금 산정. 공공 charger_status는 쓰지 않음."""
-    if kwh < MIN_KWH or kwh > MAX_KWH:
-        raise HTTPException(
-            status_code=400,
-            detail=f"kwh는 {MIN_KWH}~{MAX_KWH} 범위여야 합니다",
-        )
+    pay_mode = _normalize_pay_mode(mode)
+    if pay_mode == PAY_MODE_USAGE:
+        if kwh is None or kwh < MIN_KWH or kwh > MAX_KWH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"kwh는 {MIN_KWH}~{MAX_KWH} 범위여야 합니다",
+            )
 
     try:
         order = db.execute(
@@ -517,8 +583,10 @@ def complete_order(
                 status_code=409,
                 detail=f"완료할 수 없는 상태입니다 ({order.status})",
             )
-        # 이미 요금 산정됨(멱등) — kwh_source=manual
-        if order.kwh_source == KWH_SOURCE_MANUAL and Decimal(str(order.rate_member_won)) > 0:
+        if (
+            order.kwh_source == KWH_SOURCE_MANUAL
+            and Decimal(str(order.rate_member_won)) > 0
+        ):
             hold = int(order.amount_list_krw)
             wallet = _ensure_wallet(db, user_pk=user_pk)
             db.commit()
@@ -552,31 +620,26 @@ def complete_order(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        kwh_dec = Decimal(str(kwh)).quantize(Decimal("0.01"))
-        # 원 단위 버림: floor(kwh * rate)
-        actual = int(
-            (kwh_dec * rate).to_integral_value(rounding=ROUND_FLOOR)
-        )
-        if actual < 0:
-            actual = 0
-
         hold = int(order.amount_list_krw)
-        if actual > hold:
-            # 한도 초과분은 한도로 캡 (미납 방지)
-            actual = hold
+        if pay_mode == PAY_MODE_AMOUNT:
+            kwh_dec, actual = _amount_mode_kwh_and_fee(hold, rate)
+        else:
+            kwh_dec = Decimal(str(kwh)).quantize(Decimal("0.01"))
+            actual = int(
+                (kwh_dec * rate).to_integral_value(rounding=ROUND_FLOOR)
+            )
+            if actual < 0:
+                actual = 0
 
         now = _now()
         order.kwh = kwh_dec
-        # DB CHECK: manual|preset|operator_session
         src = (kwh_source or KWH_SOURCE_MANUAL).strip() or KWH_SOURCE_MANUAL
         if src not in (KWH_SOURCE_MANUAL, "preset", "operator_session"):
             src = KWH_SOURCE_MANUAL
         order.kwh_source = src if src != KWH_SOURCE_PRESET else KWH_SOURCE_MANUAL
         order.busi_id = str(raw_busi).strip() if raw_busi else None
         order.rate_member_won = rate
-        order.rate_non_member_won = None  # member만 사용
-        # amount_list_krw = 가결제 한도 유지
-        # amount_charge_krw = 실요금 (discount는 CHECK상 charge 이하여야 해서 0 유지)
+        order.rate_non_member_won = None
         order.amount_charge_krw = actual
         order.discount_krw = 0
         order.status = STATUS_DRAFT
@@ -592,6 +655,7 @@ def complete_order(
             order,
             hold_amount_krw=hold,
             balance=int(wallet.balance),
+            shortfall_krw=_shortfall_krw(hold, actual),
         )
     except HTTPException:
         db.rollback()
@@ -610,7 +674,7 @@ def pay_order(
     user_pk: int,
     order_id: int,
 ) -> dict[str, object]:
-    """4단계: 가결제 한도 − 실요금 차액 환불, confirmed."""
+    """4단계: 홀드 대비 실요금 정산(환불 또는 부족분 추가 차감)."""
     try:
         user = db.execute(
             select(User).where(User.id == user_pk).with_for_update()
@@ -653,17 +717,23 @@ def pay_order(
 
         hold = int(order.amount_list_krw)
         actual = int(order.amount_charge_krw)
-        refund = max(0, hold - actual)
-
         now = _now()
-        if refund > 0:
-            existing_refund = db.scalar(
+
+        if actual > hold:
+            shortfall = actual - hold
+            if int(wallet.balance) < shortfall:
+                raise HTTPException(
+                    status_code=402,
+                    detail="포인트가 부족합니다. 포인트 충전 후 다시 시도하세요",
+                )
+            existing_shortfall = db.scalar(
                 select(PointTransaction).where(
-                    PointTransaction.idempotency_key == _refund_tx_key(int(order.id))
+                    PointTransaction.idempotency_key
+                    == _shortfall_tx_key(int(order.id))
                 )
             )
-            if existing_refund is None:
-                new_balance = int(wallet.balance) + refund
+            if existing_shortfall is None:
+                new_balance = int(wallet.balance) - shortfall
                 wallet.balance = new_balance
                 wallet.version = int(wallet.version) + 1
                 wallet.updated_at = now
@@ -672,23 +742,54 @@ def pay_order(
                 db.add(
                     PointTransaction(
                         wallet_id=user_pk,
-                        type=TX_TYPE_REFUND,
-                        amount=refund,
+                        type=TX_TYPE_USE,
+                        amount=shortfall,
                         balance_after=new_balance,
                         ref_type=REF_TYPE_USAGE_ORDER,
                         ref_id=int(order.id),
-                        idempotency_key=_refund_tx_key(int(order.id)),
-                        memo=f"충전 가결제 차액 환불 order={order.id}",
+                        idempotency_key=_shortfall_tx_key(int(order.id)),
+                        memo=f"충전 부족분 차감 order={order.id}",
                         created_at=now,
                     )
                 )
             else:
                 new_balance = int(wallet.balance)
+            refund = 0
         else:
-            new_balance = int(wallet.balance)
+            refund = hold - actual
+            if refund > 0:
+                existing_refund = db.scalar(
+                    select(PointTransaction).where(
+                        PointTransaction.idempotency_key
+                        == _refund_tx_key(int(order.id))
+                    )
+                )
+                if existing_refund is None:
+                    new_balance = int(wallet.balance) + refund
+                    wallet.balance = new_balance
+                    wallet.version = int(wallet.version) + 1
+                    wallet.updated_at = now
+                    user.point = new_balance
+                    user.updated_at = now
+                    db.add(
+                        PointTransaction(
+                            wallet_id=user_pk,
+                            type=TX_TYPE_REFUND,
+                            amount=refund,
+                            balance_after=new_balance,
+                            ref_type=REF_TYPE_USAGE_ORDER,
+                            ref_id=int(order.id),
+                            idempotency_key=_refund_tx_key(int(order.id)),
+                            memo=f"충전 가결제 차액 환불 order={order.id}",
+                            created_at=now,
+                        )
+                    )
+                else:
+                    new_balance = int(wallet.balance)
+            else:
+                new_balance = int(wallet.balance)
 
         order.points_spent = actual
-        # discount_krw <= amount_charge_krw CHECK → 환불액은 원장에만 기록
         order.discount_krw = 0
         order.status = STATUS_CONFIRMED
         order.updated_at = now
