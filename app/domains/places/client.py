@@ -31,6 +31,34 @@ def _parse_park_flag(value: object) -> bool | None:
     return None
 
 
+def _format_poi_address(poi: dict) -> str:
+    """시·도/시군구/읍면동 + 도로명 번지. 행정구역만 있으면 읍면동 단위로만 보임."""
+    admin = " ".join(
+        filter(
+            None,
+            [
+                str(poi.get("upperAddrName") or "").strip(),
+                str(poi.get("middleAddrName") or "").strip(),
+                str(poi.get("lowerAddrName") or "").strip(),
+            ],
+        )
+    )
+    road = str(poi.get("roadName") or "").strip()
+    first = str(poi.get("firstNo") or "").strip()
+    second = str(poi.get("secondNo") or "").strip()
+    road_part = ""
+    if road:
+        if first and second and second not in ("0", "00"):
+            road_part = f"{road} {first}-{second}"
+        elif first:
+            road_part = f"{road} {first}"
+        else:
+            road_part = road
+    if admin and road_part:
+        return f"{admin} {road_part}"
+    return admin or road_part
+
+
 def _normalize_pois(data: dict) -> list[dict]:
     pois = (
         data.get("searchPoiInfo", {})
@@ -46,16 +74,7 @@ def _normalize_pois(data: dict) -> list[dict]:
         {
             "id": poi.get("id"),
             "name": poi.get("name"),
-            "address": " ".join(
-                filter(
-                    None,
-                    [
-                        poi.get("upperAddrName"),
-                        poi.get("middleAddrName"),
-                        poi.get("lowerAddrName"),
-                    ],
-                )
-            ),
+            "address": _format_poi_address(poi),
             "lat": poi.get("noorLat"),
             "lng": poi.get("noorLon"),
             "middleBizName": _clean_biz_name(poi.get("middleBizName")),
