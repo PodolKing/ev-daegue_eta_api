@@ -7,10 +7,15 @@ TMAP_URL = "https://apis.openapi.sk.com/tmap/pois"
 TMAP_AROUND_URL = "https://apis.openapi.sk.com/tmap/pois/search/around"
 
 
+def _unescape_tmap_text(value: object) -> str:
+    """TMAP 일부 필드는 JSON 이스케이프가 문자열에 남음 (운동장\\/체육관)."""
+    return str(value or "").replace("\\/", "/").strip()
+
+
 def _clean_biz_name(value: object) -> str | None:
     if value is None:
         return None
-    s = str(value).strip()
+    s = _unescape_tmap_text(value)
     if not s or s == "기타":
         return None
     return s
@@ -37,15 +42,15 @@ def _format_poi_address(poi: dict) -> str:
         filter(
             None,
             [
-                str(poi.get("upperAddrName") or "").strip(),
-                str(poi.get("middleAddrName") or "").strip(),
-                str(poi.get("lowerAddrName") or "").strip(),
+                _unescape_tmap_text(poi.get("upperAddrName")),
+                _unescape_tmap_text(poi.get("middleAddrName")),
+                _unescape_tmap_text(poi.get("lowerAddrName")),
             ],
         )
     )
-    road = str(poi.get("roadName") or "").strip()
-    first = str(poi.get("firstNo") or "").strip()
-    second = str(poi.get("secondNo") or "").strip()
+    road = _unescape_tmap_text(poi.get("roadName"))
+    first = _unescape_tmap_text(poi.get("firstNo"))
+    second = _unescape_tmap_text(poi.get("secondNo"))
     road_part = ""
     if road:
         if first and second and second not in ("0", "00"):
@@ -73,7 +78,7 @@ def _normalize_pois(data: dict) -> list[dict]:
     return [
         {
             "id": poi.get("id"),
-            "name": poi.get("name"),
+            "name": _unescape_tmap_text(poi.get("name")) or poi.get("name"),
             "address": _format_poi_address(poi),
             "lat": poi.get("noorLat"),
             "lng": poi.get("noorLon"),
